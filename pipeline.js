@@ -266,14 +266,27 @@ function enforceTaglineLength(html) {
 
   if (words.length <= 7) return html;
 
-  // Truncate to 7 words
-  let truncated = words.slice(0, 7).join(' ');
-  // Ensure it ends with a period
-  if (!truncated.match(/[.!?]$/)) truncated += '.';
+  // Tagline exceeds 7 words. Blind-slicing at word 7 ships broken fragments
+  // like "Your business built your life. Make a." — instead, keep the longest
+  // complete-sentence prefix that fits in 7 words. If no sentence fits, drop
+  // the tagline entirely (editors prefer no tagline over a broken one).
+  const sentences = splitSentences(taglineText) || [];
+  let kept = '';
+  let keptWords = 0;
+  for (const s of sentences) {
+    const sWords = s.trim().split(/\s+/).filter(w => w.length > 0).length;
+    if (keptWords + sWords > 7) break;
+    kept = (kept + ' ' + s.trim()).trim();
+    keptWords += sWords;
+  }
 
   const oldTag = taglineMatch[0];
-  const newTag = `<p><strong>${truncated}</strong></p>`;
-  return html.replace(oldTag, newTag);
+  if (kept) {
+    const newTag = `<p><strong>${kept}</strong></p>`;
+    return html.replace(oldTag, newTag);
+  }
+  console.warn(`[Pipeline] Tagline exceeds 7 words with no fitting sentence prefix — dropping: "${taglineText.slice(0, 120)}"`);
+  return html.replace(oldTag, '');
 }
 
 // Shared sentence splitter that handles legal abbreviations (U.S., D.U.I., etc.)
@@ -1118,4 +1131,4 @@ async function runPipeline(payload) {
   };
 }
 
-module.exports = { runPipeline };
+module.exports = { runPipeline, enforceTaglineLength };
