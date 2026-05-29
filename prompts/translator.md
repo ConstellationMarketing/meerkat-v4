@@ -25,11 +25,21 @@ Slug rules:
 - Example: "cómo presentar una demanda" → "como-presentar-una-demanda"
 - Keep the slug concise — aim for a similar length to the English original
 
-Output format:
-- Return ONLY a single valid JSON object with exactly these four keys: "title", "meta", "slug", "content"
-- All string values must be properly JSON-escaped (escape inner double quotes, backslashes, and newlines)
-- Do not wrap the JSON in markdown code fences
-- Do not include any text before or after the JSON object
+Output format (follow EXACTLY):
+- First, output a single JSON object on one line with exactly three keys: "title", "meta", "slug". JSON-escape these three short plain-text values normally.
+- Then, on the next line, output the literal marker `<<<CONTENT>>>` on its own line.
+- Then output the translated HTML body as raw HTML — do NOT JSON-escape it, do NOT wrap it in quotes, do NOT alter any tags or attributes. Output the HTML exactly as it should appear.
+- Then, on a final line, output the literal marker `<<<END_CONTENT>>>`.
+- Do not wrap anything in markdown code fences.
+- Do not include any text before the JSON header or after the `<<<END_CONTENT>>>` marker.
+
+Output shape (illustrative):
+{"title": "…", "meta": "…", "slug": "…"}
+<<<CONTENT>>>
+<h1>…</h1><p>…<a href="https://example.com/">…</a>…</p>
+<<<END_CONTENT>>>
+
+This format keeps the HTML body out of JSON entirely, so quotes inside HTML attributes (href, class, target, rel) never need escaping. The three header fields are short plain text with no HTML.
 
 USER:
 Translate the following law-firm article fields to {{LANGUAGE}}. Return the translated values as a single JSON object.
