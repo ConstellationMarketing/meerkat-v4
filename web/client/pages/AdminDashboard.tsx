@@ -43,6 +43,69 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 
+// CSV export helper for the editor-feedback table. Mirrors only the columns
+// visible in the UI (Article Title, User, Feedback Date, Reported Time,
+// Version, Original/Final article URLs, Issues). Tracked Time is captured in
+// the DB but intentionally excluded — it's hidden in the UI and the export
+// should match what editors and admins actually see.
+function exportFeedbackToCsv(rows: EditingFeedbackData[]) {
+  const headers = [
+    "Article Title",
+    "User",
+    "Feedback Date",
+    "Reported Time",
+    "Version",
+    "Original Article URL",
+    "Final Article URL",
+    "Issues",
+  ];
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const escape = (v: unknown) => {
+    const s = v == null ? "" : String(v);
+    if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  };
+  const lines = [headers.map(escape).join(",")];
+  for (const r of rows) {
+    const articleId =
+      r.articleId || r.articleLink?.match(/\/editor\/([^/?]+)/)?.[1] || "";
+    const originalUrl = articleId
+      ? `${origin}/share-article/${articleId}?original=true`
+      : "";
+    const finalUrl = articleId ? `${origin}/share-article/${articleId}` : "";
+    const date = r.createdAt
+      ? new Date(r.createdAt).toLocaleDateString()
+      : "";
+    lines.push(
+      [
+        r.articleTitle,
+        r.userEmail,
+        date,
+        r.timeSpent,
+        r.version || "",
+        originalUrl,
+        finalUrl,
+        r.issues,
+      ]
+        .map(escape)
+        .join(","),
+    );
+  }
+  // UTF-8 BOM so Excel opens it without garbling Vietnamese / accented text.
+  const BOM = "﻿";
+  const blob = new Blob([BOM + lines.join("\n")], {
+    type: "text/csv;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `meerkat-feedback-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -716,10 +779,24 @@ export default function AdminDashboard() {
           <TabsContent value="edited-articles" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Edited Articles Feedback</CardTitle>
-                <CardDescription>
-                  View feedback from editors on articles they've edited
-                </CardDescription>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <CardTitle>Edited Articles Feedback</CardTitle>
+                    <CardDescription>
+                      View feedback from editors on articles they've edited
+                    </CardDescription>
+                  </div>
+                  <Button
+                    onClick={() => exportFeedbackToCsv(editingFeedback)}
+                    disabled={feedbackLoading || editingFeedback.length === 0}
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 shrink-0"
+                  >
+                    <Download className="w-4 h-4" />
+                    Export CSV
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {feedbackLoading ? (
