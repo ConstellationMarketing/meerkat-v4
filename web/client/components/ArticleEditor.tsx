@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
+  Circle,
   X,
   MessageCircle,
 } from "lucide-react";
@@ -160,6 +161,11 @@ function formatLastEditTime(date: Date | string | null | undefined): string {
   return editDate.toLocaleDateString();
 }
 
+// Format a Date as "h:mm AM/PM" for the save-status indicator.
+function formatSavedAt(d: Date): string {
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
 interface ArticleEditorProps {
   projectId: string;
   onUpdate: () => void;
@@ -211,8 +217,11 @@ export function ArticleEditor({ projectId, onUpdate }: ArticleEditorProps) {
     useState<ArticleRevision | null>(null);
   const [isRestoringRevision, setIsRestoringRevision] = useState(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState<
-    "idle" | "saving" | "saved" | "error"
+    "idle" | "unsaved" | "saving" | "saved" | "error"
   >("idle");
+  // Timestamp of the last successful autosave THIS SESSION. Null until the
+  // user's first edit has been persisted. Drives the "Saved at H:MM" display.
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [isEditFocus, setIsEditFocus] = useState(() => {
     const stored = sessionStorage.getItem("editor_isEditFocus");
     return stored ? JSON.parse(stored) : false;
@@ -741,6 +750,25 @@ export function ArticleEditor({ projectId, onUpdate }: ArticleEditorProps) {
     };
   }, []);
 
+  // Warn on page-leave if there are unsaved or in-flight edits. The browser
+  // forces a generic "Changes you made may not be saved" dialog — the exact
+  // text isn't customizable in modern browsers, but the prompt itself is
+  // what we need to prevent silent loss when a user closes the tab during
+  // the autosave debounce window.
+  useEffect(() => {
+    const hasPendingWork =
+      autoSaveStatus === "unsaved" ||
+      autoSaveStatus === "saving" ||
+      autoSaveStatus === "error";
+    if (!hasPendingWork) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [autoSaveStatus]);
+
   // Listen for copy events
   useEffect(() => {
     const handleArticleCopied = () => {
@@ -843,6 +871,7 @@ export function ArticleEditor({ projectId, onUpdate }: ArticleEditorProps) {
         });
 
         setAutoSaveStatus("saved");
+        setLastSavedAt(new Date());
         console.log("✨ Article saved successfully");
 
         // Update the article cache with the fresh save
@@ -882,6 +911,13 @@ export function ArticleEditor({ projectId, onUpdate }: ArticleEditorProps) {
       if (!dataToSave.id) {
         return;
       }
+
+      // Flip to "unsaved" the moment an edit comes in — before the debounce
+      // delay. Without this the indicator would stay on "Saved" for the full
+      // 1-second debounce window, masking the fact that pending work hasn't
+      // been persisted yet. (Surfaced by the June 2026 silent-save-loss
+      // incident — editor couldn't tell their edits hadn't been captured.)
+      setAutoSaveStatus("unsaved");
 
       // Store the latest data in ref
       autoSaveDataRef.current = dataToSave;
@@ -1488,6 +1524,12 @@ ${htmlBody}
             </Button>
             {/* Save Status Indicator */}
             <div className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
+              {autoSaveStatus === "unsaved" && (
+                <>
+                  <Circle className="w-3 h-3 text-amber-600 fill-amber-500" />
+                  <span className="text-amber-700 font-medium">Unsaved changes</span>
+                </>
+              )}
               {autoSaveStatus === "saving" && (
                 <>
                   <Loader2 className="w-3 h-3 animate-spin text-blue-600" />
@@ -1498,14 +1540,16 @@ ${htmlBody}
                 <>
                   <CheckCircle2 className="w-3 h-3 text-green-600" />
                   <span className="text-green-600 font-medium">
-                    {autoSaveStatus === "saved" ? "Saved" : "✓ Saved"}
+                    {lastSavedAt
+                      ? `Saved at ${formatSavedAt(lastSavedAt)}`
+                      : "Saved"}
                   </span>
                 </>
               )}
               {autoSaveStatus === "error" && (
                 <>
                   <AlertCircle className="w-3 h-3 text-red-600" />
-                  <span className="text-red-600 font-medium">Save error</span>
+                  <span className="text-red-600 font-medium">Save failed — retry</span>
                 </>
               )}
             </div>
@@ -1739,6 +1783,12 @@ ${htmlBody}
           <div className="flex gap-2 items-center flex-shrink-0">
             {/* Always show save status indicator */}
             <div className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
+              {autoSaveStatus === "unsaved" && (
+                <>
+                  <Circle className="w-3 h-3 text-amber-600 fill-amber-500" />
+                  <span className="text-amber-700 font-medium">Unsaved changes</span>
+                </>
+              )}
               {autoSaveStatus === "saving" && (
                 <>
                   <Loader2 className="w-3 h-3 animate-spin text-blue-600" />
@@ -1749,14 +1799,16 @@ ${htmlBody}
                 <>
                   <CheckCircle2 className="w-3 h-3 text-green-600" />
                   <span className="text-green-600 font-medium">
-                    {autoSaveStatus === "saved" ? "Saved" : "✓ Saved"}
+                    {lastSavedAt
+                      ? `Saved at ${formatSavedAt(lastSavedAt)}`
+                      : "Saved"}
                   </span>
                 </>
               )}
               {autoSaveStatus === "error" && (
                 <>
                   <AlertCircle className="w-3 h-3 text-red-600" />
-                  <span className="text-red-600 font-medium">Save error</span>
+                  <span className="text-red-600 font-medium">Save failed — retry</span>
                 </>
               )}
             </div>
