@@ -166,6 +166,39 @@ function formatSavedAt(d: Date): string {
   return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
+// Fire-and-forget telemetry beacon. Captures autosave failure modes for
+// later inspection in meerkat.autosave_telemetry. Intentionally returns
+// void and swallows all errors — telemetry must NEVER block or break
+// the editor. Added after the June 2026 phantom-write incident, where
+// the autosave call site had been silently disconnected and we had no
+// signal that nothing was being persisted.
+function sendAutosaveTelemetry(
+  eventType: "save_error" | "edits_without_saves" | "save_success",
+  payload: {
+    articleId?: string;
+    userEmail?: string;
+    errorMessage?: string;
+    details?: Record<string, unknown>;
+  } = {},
+): void {
+  try {
+    fetch("/.netlify/functions/autosave-telemetry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event_type: eventType,
+        article_id: payload.articleId,
+        user_email: payload.userEmail,
+        error_message: payload.errorMessage,
+        details: payload.details,
+      }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    // Telemetry must not throw into the editor under any circumstances.
+  }
+}
+
 interface ArticleEditorProps {
   projectId: string;
   onUpdate: () => void;
@@ -245,6 +278,13 @@ export function ArticleEditor({ projectId, onUpdate }: ArticleEditorProps) {
   const [activeLanguage, setActiveLanguage] = useState<TranslationLanguage | null>(null);
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const autoSaveDataRef = useRef<ArticleOutline | null>(null);
+  // Canary counters for the "user edits but no saves fire" failure mode.
+  // Incremented in triggerAutoSave / performAutoSave; checked periodically
+  // and a beacon is sent if edits >> successful saves over time. Caught
+  // the dead-code autosave silently (June 2026 phantom-write incident).
+  const editCountRef = useRef<number>(0);
+  const autosaveSuccessCountRef = useRef<number>(0);
+  const editsWithoutSavesReportedRef = useRef<boolean>(false);
   const pageConfigTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const clientFoldersCachedRef = useRef<any[] | null>(null);
   const articleCacheRef = useRef<Record<string, { data: ArticleOutline; timestamp: number }>>({});
@@ -750,6 +790,39 @@ export function ArticleEditor({ projectId, onUpdate }: ArticleEditorProps) {
     };
   }, []);
 
+  // Canary: detect "user is editing but no save has succeeded" — the failure
+  // mode that ate Jose's work in the June 2026 phantom-write incident. Runs
+  // every 30s while the editor is mounted. If we see ≥3 edits but zero
+  // successful autosaves AND it's been ≥60s since the article loaded, send
+  // exactly one telemetry beacon (per editor session) so it surfaces fast
+  // next time the autosave call site silently breaks.
+  useEffect(() => {
+    const sessionStartedAt = Date.now();
+    const intervalId = setInterval(() => {
+      if (editsWithoutSavesReportedRef.current) return;
+      if (Date.now() - sessionStartedAt < 60_000) return;
+      const edits = editCountRef.current;
+      const saves = autosaveSuccessCountRef.current;
+      if (edits >= 3 && saves === 0) {
+        editsWithoutSavesReportedRef.current = true;
+        sendAutosaveTelemetry("edits_without_saves", {
+          articleId: outline?.articleId,
+          details: {
+            edits_recorded: edits,
+            saves_recorded: saves,
+            seconds_since_load: Math.round(
+              (Date.now() - sessionStartedAt) / 1000,
+            ),
+          },
+        });
+        console.warn(
+          `[autosave canary] ${edits} edits recorded but 0 successful saves in ${Math.round((Date.now() - sessionStartedAt) / 1000)}s — telemetry beacon sent`,
+        );
+      }
+    }, 30_000);
+    return () => clearInterval(intervalId);
+  }, [outline?.articleId]);
+
   // Warn on page-leave if there are unsaved or in-flight edits. The browser
   // forces a generic "Changes you made may not be saved" dialog — the exact
   // text isn't customizable in modern browsers, but the prompt itself is
@@ -872,6 +945,7 @@ export function ArticleEditor({ projectId, onUpdate }: ArticleEditorProps) {
 
         setAutoSaveStatus("saved");
         setLastSavedAt(new Date());
+        autosaveSuccessCountRef.current += 1;
         console.log("✨ Article saved successfully");
 
         // Update the article cache with the fresh save
@@ -892,6 +966,16 @@ export function ArticleEditor({ projectId, onUpdate }: ArticleEditorProps) {
           error instanceof Error ? error.message : String(error);
         console.error("❌ Error during autosave:", errorMessage);
         setAutoSaveStatus("error");
+        // Telemetry: log the failure so we have a record of how often
+        // autosave fails in the wild and why. Fire-and-forget.
+        sendAutosaveTelemetry("save_error", {
+          articleId: dataToSave.articleId,
+          errorMessage,
+          details: {
+            outline_id: dataToSave.id,
+            content_length: dataToSave.receivedArticle?.content?.length ?? 0,
+          },
+        });
         toast({
           title: "Save Failed",
           description: `Could not save changes: ${errorMessage}. Please try again or contact support if this persists.`,
@@ -904,7 +988,24 @@ export function ArticleEditor({ projectId, onUpdate }: ArticleEditorProps) {
     [toast, pageUpdateType, pageUrl],
   );
 
-  // Debounce autosave to avoid too many requests
+  // ──────────────────────────────────────────────────────────────────────
+  // AUTOSAVE — DO NOT DISCONNECT
+  //
+  // `triggerAutoSave` MUST be called from every content/title/meta change
+  // handler. If you find yourself adding "NO AUTO-SAVE" comments or removing
+  // the triggerAutoSave() call from a change handler, STOP. That exact
+  // pattern caused the June 2026 phantom-write incident — editor work was
+  // silently lost for ~3 months because the call site had been disconnected
+  // (Builder.io commit 081aef9, 2026-03-04, no documented reason).
+  //
+  // The infrastructure (this function, performAutoSave, the indicator state,
+  // the beforeunload guard, the canary telemetry beacon) only works when the
+  // change handlers actually call this function. The autosave_telemetry
+  // table + canary effect above will surface a regression within ~60s of an
+  // editor session if you break this contract — but don't rely on that.
+  // Verify by typing in the editor and watching for a network request to
+  // /rest/v1/article_outlines within ~1 second.
+  // ──────────────────────────────────────────────────────────────────────
   const triggerAutoSave = useCallback(
     (dataToSave: ArticleOutline) => {
       // Don't auto-save if article doesn't have an ID yet
@@ -918,6 +1019,7 @@ export function ArticleEditor({ projectId, onUpdate }: ArticleEditorProps) {
       // been persisted yet. (Surfaced by the June 2026 silent-save-loss
       // incident — editor couldn't tell their edits hadn't been captured.)
       setAutoSaveStatus("unsaved");
+      editCountRef.current += 1;
 
       // Store the latest data in ref
       autoSaveDataRef.current = dataToSave;
