@@ -985,7 +985,7 @@ export function ArticleEditor({ projectId, onUpdate }: ArticleEditorProps) {
             }
           : null;
         if (updated) {
-          // NO AUTO-SAVE: Just backup to localStorage, don't call Supabase until Save button is clicked
+          // Local backup (fast, synchronous fallback).
           try {
             const outlines = JSON.parse(localStorage.getItem("article_outlines") || "[]");
             const index = outlines.findIndex((o: ArticleOutline) => o.id === updated.id);
@@ -998,11 +998,19 @@ export function ArticleEditor({ projectId, onUpdate }: ArticleEditorProps) {
           } catch (error) {
             console.error("Error backing up to localStorage:", error);
           }
+          // Fire autosave (debounced inside triggerAutoSave). The system was
+          // built end-to-end (triggerAutoSave → performAutoSave → Supabase)
+          // but the call site had been replaced with a "NO AUTO-SAVE" comment
+          // at some point, leaving the indicator and beforeunload guard dead
+          // and editor edits silently failing to persist unless the user hit
+          // the manual Save button. See PR #70 / June 2026 phantom-write
+          // incident for the audit.
+          triggerAutoSave(updated);
         }
         return updated;
       });
     },
-    [],
+    [triggerAutoSave],
   );
 
   const handleArticleTitleChange = useCallback(
@@ -1021,7 +1029,6 @@ export function ArticleEditor({ projectId, onUpdate }: ArticleEditorProps) {
             }
           : null;
         if (updated) {
-          // NO AUTO-SAVE: Just backup to localStorage, don't call Supabase until Save button is clicked
           try {
             const outlines = JSON.parse(localStorage.getItem("article_outlines") || "[]");
             const index = outlines.findIndex((o: ArticleOutline) => o.id === updated.id);
@@ -1034,11 +1041,12 @@ export function ArticleEditor({ projectId, onUpdate }: ArticleEditorProps) {
           } catch (error) {
             console.error("Error backing up to localStorage:", error);
           }
+          triggerAutoSave(updated);
         }
         return updated;
       });
     },
-    [],
+    [triggerAutoSave],
   );
 
   const handleArticleDescriptionChange = useCallback(
@@ -1057,7 +1065,6 @@ export function ArticleEditor({ projectId, onUpdate }: ArticleEditorProps) {
             }
           : null;
         if (updated) {
-          // NO AUTO-SAVE: Just backup to localStorage, don't call Supabase until Save button is clicked
           try {
             const outlines = JSON.parse(localStorage.getItem("article_outlines") || "[]");
             const index = outlines.findIndex((o: ArticleOutline) => o.id === updated.id);
@@ -1070,11 +1077,12 @@ export function ArticleEditor({ projectId, onUpdate }: ArticleEditorProps) {
           } catch (error) {
             console.error("Error backing up to localStorage:", error);
           }
+          triggerAutoSave(updated);
         }
         return updated;
       });
     },
-    [],
+    [triggerAutoSave],
   );
 
   const handleSchemaChange = useCallback((schema: string) => {
