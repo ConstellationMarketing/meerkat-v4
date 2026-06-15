@@ -235,7 +235,7 @@ export function Sidebar({
   }
 
   return (
-    <div className="w-80 border-r border-border bg-card flex flex-col h-full">
+    <div className="w-80 border-r border-border bg-blue-600 flex flex-col h-full">
       {/* Header */}
       <div className="border-b border-border p-6">
         <div className="flex items-center justify-between mb-4">
