@@ -22,6 +22,7 @@ This article is a **{{template}}** page. Follow the page-type-specific rules bel
 - Every H2 section MUST begin with at least 1-2 introductory sentences before any H3 sub-heading. Never go directly from an H2 heading to an H3 heading with no body text in between.
 - Never use H1 more than once regardless of section or context
 - The exact keyword phrasing must be used in the H1 and at least 3 times in body text. Do NOT substitute synonyms for the primary keyword — if the keyword uses "attorney," do not swap it for "lawyer"; if it uses "lawyer," do not swap it for "attorney"
+- The first H2 must not merely rephrase the H1 as a question or near-synonym. Prohibited example: H1 "Walk-in Biometric Appointment" followed by H2 "Can You Walk In for a Biometric Appointment?". The first H2 must open a genuinely distinct sub-topic.
 
 ### Word Choice
 - Prefer one-syllable words when the meaning is the same: "help" not "assist," "show" not "demonstrate," "use" not "utilize," "get" not "obtain," "find" not "identify"
@@ -36,7 +37,7 @@ This article is a **{{template}}** page. Follow the page-type-specific rules bel
 ### Sentence Structure
 - After any sentence over 20 words, the next sentence must be under 10 words
 - Never stack two sentences with 3+ syllable words back-to-back
-- Use sentence fragments strategically for emphasis. Like this.
+- Use sentence fragments sparingly for emphasis within a paragraph — never as a standalone one-line paragraph.
 - Front-load impact: Put the most important word in the first three words of the sentence
 
 ### Legal Term Management
@@ -130,6 +131,8 @@ Sections must build on each other. The boundaries below tell you what each secti
 
 If your assigned section's brief overlaps with another section's brief (e.g., both touch on "process"), differentiate by *angle*: one section covers the firm's response, the other covers the client experience and timeline.
 
+**Within-section progression:** Within a single section, follow a logical order — define the concept → explain how it works → apply it to the reader's situation → point to next steps. Do not jump between unrelated sub-topics inside one section.
+
 ## Introduction — Prohibited Filler
 - Do NOT end the introduction with meta-commentary about the article itself. The following patterns are banned:
   - "This guide will walk you through..."
@@ -165,6 +168,11 @@ If your assigned section's brief overlaps with another section's brief (e.g., bo
   - "No one expects to face [legal issue]..."
 - Instead, lead with the specific fact, process step, or legal concept the paragraph is about. Emotion and empathy can follow — but the point comes first.
 
+## Introduction — Opening
+- The first sentence of the introduction must directly answer the H1's question or topic — state the core answer, not scene-setting.
+- The opening paragraph must be 2-3 sentences. The other required elements (firm name, location, what is at stake, brief preview) follow in subsequent short paragraphs — never packed into one long block.
+- The opening sentence must be distinct per article — do NOT reuse the same opening formula or near-identical wording across articles for the same client.
+
 ## Tagline Rules
 - If this is a **practice** page: you MUST include exactly one tagline (7 words or fewer) in the Introduction section ONLY
 - If this is a **supporting** page: you MAY include one tagline or omit it entirely — never more than one
@@ -174,6 +182,9 @@ If your assigned section's brief overlaps with another section's brief (e.g., bo
 - A tagline must appear exactly once in the entire article — never repeat it
 - Format taglines with double asterisks for bold: **Your tagline here.** — never use single asterisks
 - Do NOT place short bold standalone phrases (e.g. "**Results matter.**", "**Experienced. Focused. Ready.**") anywhere in the article. The only standalone bold phrase allowed is the single tagline in the Introduction. Any short bold phrase on its own line outside the Introduction is prohibited.
+
+## No Vague Filler
+- Every statement must give the reader specific, practical information. Do NOT use evasive filler that avoids a direct answer (e.g., "each situation is different," "every case is unique," "intent matters here," "it depends on the circumstances") UNLESS the same sentence immediately names the specific factors that matter (e.g., "Intent matters here: prosecutors weigh prior offenses, BAC level, and whether anyone was injured.").
 
 ## Legal Language Requirements
 - Never make definitive legal conclusions — avoid "you will win", "you are entitled to", "this is illegal", "guaranteed outcome"
@@ -208,6 +219,7 @@ Content must feel rooted in the client's real-world location. Every article must
 - If a point requires more detail, start a new paragraph
 - Top-load each paragraph with the most important idea
 - Short paragraphs improve readability, scannability, and user engagement
+- Do NOT use a standalone one-sentence paragraph for dramatic effect (e.g., "The stakes are real." / "Do not wait."). Every body paragraph must carry at least two informational sentences. The single Introduction tagline is the only exception.
 
 ## Answer Surfacing
 The most important information must appear **immediately** — readers should not have to scroll to understand the page.
