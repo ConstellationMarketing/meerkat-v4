@@ -30,6 +30,7 @@ You MUST select URLs ONLY from the client's provided target pages below.
 - **Practice pages** (keyword contains "attorney" or "lawyer"): link ONLY to other practice area pages, Homepage, About Us, or Contact Us. Do NOT link to supporting/resource pages.
 - **Supporting pages**: MUST link to at least one relevant practice area page. May also link to Homepage, About, Contact, or other related supporting pages.
 - **Location consistency**: If the article targets a specific location (e.g., Marietta), link to pages that target the same location. Do NOT link a Marietta page to an Atlanta-specific page unless no location-specific alternative exists.
+- **About page placement**: If one of the two links is the client's About / About Us page, choose an anchor term that appears in the article's "Why Choose Us" section so the link lands there — the About link belongs in "Why Choose Us", not elsewhere. On supporting/resource pages (which have no "Why Choose Us" section), do NOT select the About page.
 
 ## EXCLUSIONS (ABSOLUTE)
 - Prioritize linking to the client's homepage, contact page, and parent practice area page when they are present in the URL pool
