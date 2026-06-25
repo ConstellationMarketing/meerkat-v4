@@ -73,6 +73,21 @@
   status = 200
   to = "/.netlify/functions/api/:splat"
 
+# Server-rendered article view per language. Must sit above the /* SPA
+# fallback so `curl` on /share-article/:id[/:lang] gets translated HTML in
+# the initial response, not the React shell.
+[[redirects]]
+  force = true
+  from = "/share-article/:articleId/:lang"
+  status = 200
+  to = "/.netlify/functions/share-article-ssr?id=:articleId&lang=:lang"
+
+[[redirects]]
+  force = true
+  from = "/share-article/:articleId"
+  status = 200
+  to = "/.netlify/functions/share-article-ssr?id=:articleId"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
