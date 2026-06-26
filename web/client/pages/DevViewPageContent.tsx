@@ -686,7 +686,7 @@ export default function DevViewPageContent({
                 </span>
               </Button>
             )}
-            {(isClientView || (isPublicView && guestEmail)) && (
+            {(isClientView || (isPublicView && guestEmail && !isSharedView)) && (
               <Button
                 size="sm"
                 variant="outline"
@@ -1163,7 +1163,7 @@ export default function DevViewPageContent({
             </div>
           </div>
         </main>
-        {(isClientView || (isPublicView && guestEmail)) && (
+        {(isClientView || (isPublicView && guestEmail && !isSharedView)) && (
           <>
             <CommentsSidebar
               articleId={outline.articleId || outline.article_id}
