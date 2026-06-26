@@ -297,21 +297,7 @@ export const handler = async (event: any) => {
   const supabase = createSupabaseClient();
   const { data, error } = await supabase
     .from("article_outlines")
-    .select(
-      [
-        "article_id",
-        "client_name",
-        "keyword",
-        "received_article",
-        "translations",
-        "title_tag",
-        "meta_description",
-        "seo_title",
-        "seo_meta_description",
-        '"cleaned content"',
-        "html_content",
-      ].join(","),
-    )
+    .select("*")
     .eq("article_id", articleId)
     .maybeSingle();
 
