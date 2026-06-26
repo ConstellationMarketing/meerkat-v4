@@ -115,6 +115,65 @@ function renderTranslationsBar(
   }).join("\n");
 }
 
+function renderField(label: string, value: string): string {
+  if (!value) return "";
+  return `<div class="field"><div class="field-label">${escapeHtml(
+    label,
+  )}</div><div class="field-value">${escapeHtml(value)}</div></div>`;
+}
+
+function renderInfoPanels(opts: {
+  keyword: string;
+  clientName: string;
+  pageUrl: string;
+  urlSlug: string;
+  contentType: string;
+  wordCount: string;
+  version: string;
+  title: string;
+  meta: string;
+  schema: string;
+}): string {
+  const fields = [
+    renderField("Keyword", opts.keyword),
+    renderField("Client Name", opts.clientName),
+    renderField("Page URL", opts.pageUrl),
+    renderField("URL Slug", opts.urlSlug),
+    renderField("Content Type", opts.contentType),
+    renderField("Word Count", opts.wordCount),
+    renderField("Version", opts.version),
+  ].join("");
+
+  const metadataPanel = fields
+    ? `<section class="info-panel"><h2>Metadata</h2><div class="field-grid">${fields}</div></section>`
+    : "";
+
+  const seoPanel =
+    opts.title || opts.meta
+      ? `<section class="info-panel"><h2>SEO Information</h2>${
+          opts.title
+            ? `<div class="seo-row"><div class="field-label">Title Tag <span class="count">${opts.title.length} chars</span></div><div class="field-value">${escapeHtml(
+                opts.title,
+              )}</div></div>`
+            : ""
+        }${
+          opts.meta
+            ? `<div class="seo-row"><div class="field-label">Meta Description <span class="count">${opts.meta.length} chars</span></div><div class="field-value">${escapeHtml(
+                opts.meta,
+              )}</div></div>`
+            : ""
+        }</section>`
+      : "";
+
+  const schemaPanel = opts.schema
+    ? `<section class="info-panel"><h2>Schema</h2><pre class="schema">${escapeHtml(
+        opts.schema,
+      )}</pre></section>`
+    : "";
+
+  return metadataPanel + seoPanel + schemaPanel;
+}
+
 function renderPage(opts: {
   articleId: string;
   lang: Lang;
@@ -123,6 +182,14 @@ function renderPage(opts: {
   content: string;
   available: Set<Lang>;
   fallbackNotice: string | null;
+  keyword: string;
+  clientName: string;
+  pageUrl: string;
+  urlSlug: string;
+  contentType: string;
+  wordCount: string;
+  version: string;
+  schema: string;
 }): string {
   const cfg = LANG_CONFIG[opts.lang];
   const canonical = pathFor(opts.articleId, opts.lang);
@@ -235,6 +302,16 @@ function renderPage(opts: {
       gap: 8px;
     }
     footer a { color: var(--muted); }
+    .info-panel { border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin: 0 0 16px; background: #fafafa; }
+    .info-panel h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 0 0 12px; }
+    .field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 24px; }
+    .field-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); margin-bottom: 2px; }
+    .field-value { font-size: 14px; color: var(--fg); word-break: break-word; }
+    .seo-row { margin-bottom: 12px; }
+    .seo-row:last-child { margin-bottom: 0; }
+    .count { text-transform: none; letter-spacing: 0; color: var(--accent); font-weight: 500; margin-left: 6px; }
+    pre.schema { background: #f3f4f6; border: 1px solid var(--border); border-radius: 6px; padding: 12px; overflow-x: auto; font-size: 12px; line-height: 1.5; margin: 0; white-space: pre-wrap; word-break: break-word; }
+    .full-article-label { font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 24px 0 12px; }
   </style>
 </head>
 <body>
@@ -243,6 +320,8 @@ function renderPage(opts: {
       ${renderTranslationsBar(opts.articleId, opts.lang, opts.available)}
     </header>
     ${opts.fallbackNotice ? `<div class="notice">${escapeHtml(opts.fallbackNotice)}</div>` : ""}
+    ${renderInfoPanels(opts)}
+    <div class="full-article-label">Full Article</div>
     <article>
       <h1>${escapeHtml(opts.title)}</h1>
       ${opts.content /* trusted HTML from the editor pipeline */}
@@ -360,6 +439,24 @@ export const handler = async (event: any) => {
     }
   }
 
+  const tForSlug = lang !== "en" ? (translations as any)?.[lang] : null;
+  const urlSlug =
+    (tForSlug && tForSlug.slug) || (data as any)["URL Slug"] || "";
+
+  let schemaStr = "";
+  const rawSchema = (data as any).schema ?? (data as any)["Schema"];
+  if (rawSchema != null && rawSchema !== "") {
+    try {
+      schemaStr = JSON.stringify(
+        typeof rawSchema === "string" ? JSON.parse(rawSchema) : rawSchema,
+        null,
+        2,
+      );
+    } catch {
+      schemaStr = String(rawSchema);
+    }
+  }
+
   const html = renderPage({
     articleId,
     lang,
@@ -368,6 +465,17 @@ export const handler = async (event: any) => {
     content,
     available,
     fallbackNotice,
+    keyword: (data as any).keyword || "",
+    clientName: (data as any).client_name || "",
+    pageUrl: (data as any)["Page URL"] || "",
+    urlSlug,
+    contentType: (data as any).template || "",
+    wordCount:
+      (data as any)["word count"] != null
+        ? String((data as any)["word count"])
+        : "",
+    version: (data as any).version || "",
+    schema: schemaStr,
   });
 
   return {
