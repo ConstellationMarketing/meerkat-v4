@@ -123,7 +123,7 @@ function renderField(label: string, value: string): string {
 }
 
 function copyBtn(target: string): string {
-  return `<button type="button" class="copy-btn" data-target="${target}" onclick="copySection(this)"><span>Copy</span></button>`;
+  return `<button type="button" class="copy-btn" data-target="${target}" onclick="event.stopPropagation(); copySection(this)"><span>Copy</span></button>`;
 }
 
 function renderInfoPanels(opts: {
@@ -149,7 +149,7 @@ function renderInfoPanels(opts: {
   ].join("");
 
   const metadataPanel = fields
-    ? `<section class="info-panel"><div class="panel-head"><h2>Metadata</h2>${copyBtn(
+    ? `<section class="info-panel"><div class="panel-head collapsible" onclick="toggleSection(this)"><span class="panel-title"><span class="chevron">▾</span><h2>Metadata</h2></span>${copyBtn(
         "copy-metadata",
       )}</div><div id="copy-metadata" class="panel-body"><div class="field-grid">${fields}</div></div></section>`
     : "";
@@ -168,13 +168,13 @@ function renderInfoPanels(opts: {
 
   const seoPanel =
     opts.title || opts.meta
-      ? `<section class="info-panel"><div class="panel-head"><h2>SEO Information</h2>${copyBtn(
+      ? `<section class="info-panel"><div class="panel-head collapsible" onclick="toggleSection(this)"><span class="panel-title"><span class="chevron">▾</span><h2>SEO Information</h2></span>${copyBtn(
           "copy-seo",
         )}</div><div id="copy-seo" class="panel-body">${seoBody}</div></section>`
       : "";
 
   const schemaPanel = opts.schema
-    ? `<section class="info-panel"><div class="panel-head"><h2>Schema</h2>${copyBtn(
+    ? `<section class="info-panel"><div class="panel-head collapsible" onclick="toggleSection(this)"><span class="panel-title"><span class="chevron">▾</span><h2>Schema</h2></span>${copyBtn(
         "copy-schema",
       )}</div><div id="copy-schema" class="panel-body"><pre class="schema">${escapeHtml(
         opts.schema,
@@ -315,6 +315,11 @@ function renderPage(opts: {
     .info-panel { border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin: 0 0 16px; background: #fafafa; }
     .info-panel h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 0; }
     .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .panel-head.collapsible { cursor: pointer; user-select: none; }
+    .panel-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .panel-title h2 { margin: 0; }
+    .chevron { display: inline-block; color: var(--muted); font-size: 12px; transition: transform 0.15s; }
+    .panel-head.collapsed .chevron { transform: rotate(-90deg); }
     .full-article-head { margin: 24px 0 12px; }
     .copy-btn {
       flex-shrink: 0;
@@ -362,6 +367,12 @@ function renderPage(opts: {
     </footer>
   </div>
   <script>
+    function toggleSection(head) {
+      var body = head.nextElementSibling;
+      if (!body) return;
+      var collapsed = head.classList.toggle('collapsed');
+      body.style.display = collapsed ? 'none' : '';
+    }
     function copySection(btn) {
       var id = btn.getAttribute('data-target');
       var el = id ? document.getElementById(id) : null;
