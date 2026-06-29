@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Loader2, Globe, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ArticleOutline } from "@/types/article";
+import { getArticleOutlineById } from "@/lib/storage";
 import {
   requestTranslation,
   getTranslationStatus,
@@ -16,6 +17,8 @@ interface TranslationControlsProps {
   onLanguageChange: (language: TranslationLanguage | null) => void;
   /** Currently active display language */
   activeLanguage: TranslationLanguage | null;
+  /** Called after a translation completes — refresh translations in place instead of a full page reload. */
+  onTranslationsUpdated?: (translations: ArticleOutline["translations"]) => void;
 }
 
 const LANGUAGES: TranslationLanguage[] = ["es", "vi"];
@@ -24,6 +27,7 @@ export function TranslationControls({
   outline,
   onLanguageChange,
   activeLanguage,
+  onTranslationsUpdated,
 }: TranslationControlsProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [translating, setTranslating] = useState<TranslationLanguage | null>(null);
@@ -72,8 +76,20 @@ export function TranslationControls({
             if (pollRef.current) clearInterval(pollRef.current);
             pollRef.current = null;
             setTranslating(null);
-            // Reload the page to pick up the new translation from Supabase
-            window.location.reload();
+            // Refresh in place and switch to the new language. Avoids a full
+            // page reload, which in the Public View can drop the article
+            // context (loaded from navigation state) and fail to reflect.
+            try {
+              const fresh = await getArticleOutlineById(articleId);
+              if (fresh && onTranslationsUpdated) {
+                onTranslationsUpdated(fresh.translations);
+                onLanguageChange(lang);
+              } else {
+                window.location.reload();
+              }
+            } catch {
+              window.location.reload();
+            }
           }
         } catch {
           // Transient errors during polling are expected — keep trying

@@ -668,6 +668,9 @@ export default function DevViewPageContent({
               outline={outline}
               onLanguageChange={setActiveLanguage}
               activeLanguage={activeLanguage}
+              onTranslationsUpdated={(tr) =>
+                setOutline((prev) => ({ ...prev, translations: tr }))
+              }
             />
 
             {!isSharedView && (

@@ -1668,6 +1668,9 @@ ${htmlBody}
                 outline={outline}
                 onLanguageChange={setActiveLanguage}
                 activeLanguage={activeLanguage}
+                onTranslationsUpdated={(tr) =>
+                  setOutline((prev) => (prev ? { ...prev, translations: tr } : prev))
+                }
               />
             )}
             <Button
@@ -1926,6 +1929,9 @@ ${htmlBody}
               outline={outline}
               onLanguageChange={setActiveLanguage}
               activeLanguage={activeLanguage}
+              onTranslationsUpdated={(tr) =>
+                setOutline((prev) => (prev ? { ...prev, translations: tr } : prev))
+              }
             />
             <Button
               onClick={handleExportHtml}
