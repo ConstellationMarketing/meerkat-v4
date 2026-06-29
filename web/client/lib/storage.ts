@@ -861,7 +861,10 @@ export async function getArticleOutlineById(
       updatedAt: localData.updatedAt,
     });
     // Merge fields from Supabase that localStorage may not have
-    if (useSupabase && (!localData.translations || !localData.titleTag || !localData.version)) {
+    // Always refresh server-owned fields from Supabase. Translations are
+    // written server-side only, so localStorage can be stale when a NEW language
+    // is added after an earlier one was already cached.
+    if (useSupabase) {
       try {
         let { data: row } = await supabase
           .from("article_outlines")
@@ -877,9 +880,13 @@ export async function getArticleOutlineById(
           row = res.data;
         }
         if (row) {
-          if (row.translations && !localData.translations) {
+          if (row.translations) {
+            // Supabase is the source of truth for translations — always take the
+            // latest so a newly completed translation (e.g. a 2nd language)
+            // appears instead of being masked by an earlier cached one.
+            // (Fixes "Español not showing as Done" after Vietnamese existed.)
             localData.translations = row.translations;
-            console.log("✅ Merged translations from Supabase into localStorage article");
+            console.log("✅ Refreshed translations from Supabase into localStorage article");
           }
           if (row.title_tag && !localData.titleTag) {
             localData.titleTag = row.title_tag;
