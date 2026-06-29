@@ -122,6 +122,10 @@ function renderField(label: string, value: string): string {
   )}</div><div class="field-value">${escapeHtml(value)}</div></div>`;
 }
 
+function copyBtn(target: string): string {
+  return `<button type="button" class="copy-btn" data-target="${target}" onclick="copySection(this)"><span>Copy</span></button>`;
+}
+
 function renderInfoPanels(opts: {
   keyword: string;
   clientName: string;
@@ -145,30 +149,36 @@ function renderInfoPanels(opts: {
   ].join("");
 
   const metadataPanel = fields
-    ? `<section class="info-panel"><h2>Metadata</h2><div class="field-grid">${fields}</div></section>`
+    ? `<section class="info-panel"><div class="panel-head"><h2>Metadata</h2>${copyBtn(
+        "copy-metadata",
+      )}</div><div id="copy-metadata" class="panel-body"><div class="field-grid">${fields}</div></div></section>`
     : "";
+
+  const seoBody =
+    (opts.title
+      ? `<div class="seo-row"><div class="field-label">Title Tag <span class="count">${opts.title.length} chars</span></div><div class="field-value">${escapeHtml(
+          opts.title,
+        )}</div></div>`
+      : "") +
+    (opts.meta
+      ? `<div class="seo-row"><div class="field-label">Meta Description <span class="count">${opts.meta.length} chars</span></div><div class="field-value">${escapeHtml(
+          opts.meta,
+        )}</div></div>`
+      : "");
 
   const seoPanel =
     opts.title || opts.meta
-      ? `<section class="info-panel"><h2>SEO Information</h2>${
-          opts.title
-            ? `<div class="seo-row"><div class="field-label">Title Tag <span class="count">${opts.title.length} chars</span></div><div class="field-value">${escapeHtml(
-                opts.title,
-              )}</div></div>`
-            : ""
-        }${
-          opts.meta
-            ? `<div class="seo-row"><div class="field-label">Meta Description <span class="count">${opts.meta.length} chars</span></div><div class="field-value">${escapeHtml(
-                opts.meta,
-              )}</div></div>`
-            : ""
-        }</section>`
+      ? `<section class="info-panel"><div class="panel-head"><h2>SEO Information</h2>${copyBtn(
+          "copy-seo",
+        )}</div><div id="copy-seo" class="panel-body">${seoBody}</div></section>`
       : "";
 
   const schemaPanel = opts.schema
-    ? `<section class="info-panel"><h2>Schema</h2><pre class="schema">${escapeHtml(
+    ? `<section class="info-panel"><div class="panel-head"><h2>Schema</h2>${copyBtn(
+        "copy-schema",
+      )}</div><div id="copy-schema" class="panel-body"><pre class="schema">${escapeHtml(
         opts.schema,
-      )}</pre></section>`
+      )}</pre></div></section>`
     : "";
 
   return metadataPanel + seoPanel + schemaPanel;
@@ -303,7 +313,25 @@ function renderPage(opts: {
     }
     footer a { color: var(--muted); }
     .info-panel { border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin: 0 0 16px; background: #fafafa; }
-    .info-panel h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 0 0 12px; }
+    .info-panel h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 0; }
+    .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .full-article-head { margin: 24px 0 12px; }
+    .copy-btn {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--pill-fg);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .copy-btn:hover { background: var(--pill-bg); }
+    .copy-btn.copied { background: #ecfdf5; border-color: #6ee7b7; color: #047857; }
     .field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 24px; }
     .field-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); margin-bottom: 2px; }
     .field-value { font-size: 14px; color: var(--fg); word-break: break-word; }
@@ -311,7 +339,7 @@ function renderPage(opts: {
     .seo-row:last-child { margin-bottom: 0; }
     .count { text-transform: none; letter-spacing: 0; color: var(--accent); font-weight: 500; margin-left: 6px; }
     pre.schema { background: #f3f4f6; border: 1px solid var(--border); border-radius: 6px; padding: 12px; overflow-x: auto; font-size: 12px; line-height: 1.5; margin: 0; white-space: pre-wrap; word-break: break-word; }
-    .full-article-label { font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 24px 0 12px; }
+    .full-article-label { font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 0; }
   </style>
 </head>
 <body>
@@ -321,8 +349,10 @@ function renderPage(opts: {
     </header>
     ${opts.fallbackNotice ? `<div class="notice">${escapeHtml(opts.fallbackNotice)}</div>` : ""}
     ${renderInfoPanels(opts)}
-    <div class="full-article-label">Full Article</div>
-    <article>
+    <div class="panel-head full-article-head"><div class="full-article-label">Full Article</div>${copyBtn(
+      "copy-article",
+    )}</div>
+    <article id="copy-article">
       <h1>${escapeHtml(opts.title)}</h1>
       ${opts.content /* trusted HTML from the editor pipeline */}
     </article>
@@ -331,6 +361,39 @@ function renderPage(opts: {
       <a href="/edit/${escapeAttr(opts.articleId)}">Open in editor</a>
     </footer>
   </div>
+  <script>
+    function copySection(btn) {
+      var id = btn.getAttribute('data-target');
+      var el = id ? document.getElementById(id) : null;
+      var text = el ? (el.innerText || el.textContent || '') : '';
+      var span = btn.querySelector('span');
+      var orig = span ? span.textContent : 'Copy';
+      function done() {
+        if (span) span.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(function () {
+          if (span) span.textContent = orig;
+          btn.classList.remove('copied');
+        }, 1500);
+      }
+      function fallback() {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(ta);
+        done();
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(fallback);
+      } else {
+        fallback();
+      }
+    }
+  </script>
 </body>
 </html>`;
 }
