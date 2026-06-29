@@ -9,6 +9,7 @@ const { applyCompliance } = require('./lib/apply-compliance');
 const { scoreArticle } = require('./lib/scoring');
 const { upsertArticle } = require('./lib/supabase');
 const { publishArticle } = require('./lib/github-publish');
+const { runTranslation } = require('./lib/translate');
 const { checkAndFixFormat } = require('./lib/format-checker');
 const { checkCrossArticleDuplicates, getPriorClientPhrases } = require('./lib/cross-article-dupe-check');
 const { repairStructuralIssues } = require('./lib/structural-repair');
@@ -1149,6 +1150,22 @@ async function runPipeline(payload) {
     }
   } else {
     console.log('[Pipeline] Skipping publish (SKIP_PUBLISH=1)');
+  }
+
+  // ─── 11. Auto-translate to all languages (fire-and-forget) ────────────────
+  // Generate ES + VI in the background so translations are ready without an
+  // editor clicking "Translate". Non-blocking and fully isolated: a translation
+  // failure must never affect article generation. NOTE: this translates the
+  // freshly generated draft — substantial later editor edits should be
+  // re-translated (the backfill script re-runs the current content).
+  if (!skipPublish && !supabaseError) {
+    for (const lang of ['es', 'vi']) {
+      runTranslation(articleId, lang)
+        .then(() => console.log(`[Pipeline] Auto-translated ${articleId} -> ${lang}`))
+        .catch((err) =>
+          console.error(`[Pipeline] Auto-translate ${lang} failed for ${articleId}:`, err.message),
+        );
+    }
   }
 
   return {
