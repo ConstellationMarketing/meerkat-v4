@@ -40,9 +40,17 @@ export const handler = async (event: any) => {
       console.log("📚 Articles GET request");
 
       const supabase = createSupabaseClient();
+      // Fetch only the columns the list views use. Previously this was
+      // select("*") with a post-fetch trim, but since the full translation
+      // backfill (July 2026) that meant pulling hundreds of MB of ES/VI HTML
+      // from Supabase into the function on every list request — slow and
+      // capable of timing out the function entirely. Excludes `translations`
+      // and `cleaned content`; single-article endpoints fetch those by id.
       const { data, error } = await supabase
         .from("article_outlines")
-        .select("*")
+        .select(
+          'id, article_id, client_name, client_id, keyword, template, sections, created_at, updated_at, webhook_sent, received_article, schema, "word count", "flesch score", "Page URL", "URL Slug", user_id, version, title_tag, meta_description, page_update_type, page_url',
+        )
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -71,21 +79,10 @@ export const handler = async (event: any) => {
           })) || [],
       });
 
-      // Strip the heaviest columns the list view never displays. Since the
-      // translation backfill, `translations` (full ES + VI HTML) plus
-      // `cleaned content` bloated this list response to many megabytes, making
-      // the homepage slow to load. The editor/preview re-fetch full content by
-      // id, so the list doesn't need these.
-      const slim = (data || []).map((row: any) => {
-        const { translations, ...rest } = row;
-        delete (rest as any)["cleaned content"];
-        return rest;
-      });
-
       return {
         statusCode: 200,
         headers: corsHeaders,
-        body: JSON.stringify(slim),
+        body: JSON.stringify(data || []),
       };
     }
 
