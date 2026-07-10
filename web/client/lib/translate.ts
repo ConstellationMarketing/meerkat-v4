@@ -15,7 +15,7 @@ export const LANGUAGE_LABELS: Record<TranslationLanguage, string> = {
 export interface TranslationStatus {
   articleId: string;
   language: string;
-  status: "pending" | "complete" | "not_found";
+  status: "pending" | "complete" | "failed" | "not_found";
   translated_at?: string | null;
   content?: string | null;
   title?: string | null;

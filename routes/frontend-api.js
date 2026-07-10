@@ -9,6 +9,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
+const { queueTranslation } = require('../lib/translate-queue');
 
 const router = express.Router();
 
@@ -607,10 +608,14 @@ router.post('/update-article', async (req, res) => {
       .from('article_outlines')
       .update(updatePayload)
       .eq('id', id)
-      .select('id, received_article, updated_at, "word count", "flesch score", schema')
+      .select('id, article_id, received_article, updated_at, "word count", "flesch score", schema')
       .single();
 
     if (error) return res.status(500).json({ error: error.message });
+
+    // Keep translations in sync with edits (debounced, in-process).
+    if (data?.article_id) queueTranslation(data.article_id);
+
     res.json({ success: true, data });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -629,6 +634,10 @@ router.patch('/update-article', async (req, res) => {
       .select();
 
     if (error) return res.status(500).json({ error: error.message });
+
+    // Field updates (title tag, meta, slug…) also affect translations.
+    queueTranslation(articleId);
+
     res.json(data[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
