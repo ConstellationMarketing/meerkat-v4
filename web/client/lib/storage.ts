@@ -202,6 +202,37 @@ setTimeout(() => {
   }
 }, 1000);
 
+// Columns fetched by article LIST queries. Deliberately excludes the heavy
+// columns the list views never display: `translations` (full ES + VI HTML per
+// article since the July 2026 backfill) and `cleaned content` (immutable
+// pipeline draft). Fetching them via select("*") made list responses balloon
+// to hundreds of MB and time out, leaving the sidebar empty. Views that need
+// translations or original content re-fetch a single article by id.
+const ARTICLE_LIST_COLUMNS = [
+  "id",
+  "article_id",
+  "client_name",
+  "client_id",
+  "keyword",
+  "template",
+  "sections",
+  "created_at",
+  "updated_at",
+  "webhook_sent",
+  "received_article",
+  "schema",
+  '"word count"',
+  '"flesch score"',
+  '"Page URL"',
+  '"URL Slug"',
+  "user_id",
+  "version",
+  "title_tag",
+  "meta_description",
+  "page_update_type",
+  "page_url",
+].join(", ");
+
 export async function getArticleOutlines(options?: {
   userId?: string;
   userRole?: "admin" | "member";
@@ -241,7 +272,7 @@ export async function getArticleOutlines(options?: {
         );
         const { data: sbData, error: sbError } = await supabase
           .from("article_outlines")
-          .select("*")
+          .select(ARTICLE_LIST_COLUMNS)
           .order("created_at", { ascending: false });
         data = sbData;
         error = sbError;
@@ -253,7 +284,7 @@ export async function getArticleOutlines(options?: {
       );
       const { data: sbData, error: sbError } = await supabase
         .from("article_outlines")
-        .select("*")
+        .select(ARTICLE_LIST_COLUMNS)
         .order("created_at", { ascending: false });
       data = sbData;
       error = sbError;
@@ -451,7 +482,7 @@ export async function getAllArticlesPublic(): Promise<ArticleOutline[]> {
   try {
     const { data, error } = await supabase
       .from("article_outlines")
-      .select("*")
+      .select(ARTICLE_LIST_COLUMNS)
       .order("created_at", { ascending: false });
 
     if (error) {
