@@ -74,6 +74,13 @@ export function TranslationControls({
             setTranslating(null);
             // Reload the page to pick up the new translation from Supabase
             window.location.reload();
+          } else if (status.status === "failed") {
+            // Backend marks failed runs explicitly (July 2026) — stop polling
+            // and surface it instead of spinning forever.
+            if (pollRef.current) clearInterval(pollRef.current);
+            pollRef.current = null;
+            setTranslating(null);
+            setError("Translation failed — it will be retried automatically, or try again now.");
           }
         } catch {
           // Transient errors during polling are expected — keep trying

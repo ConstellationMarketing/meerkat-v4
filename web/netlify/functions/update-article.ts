@@ -1,6 +1,31 @@
 import { Handler } from "@netlify/functions";
 import { supabase } from "../../server/supabase";
 
+const TRANSLATE_API_URL =
+  process.env.TRANSLATE_API_URL ||
+  process.env.VITE_TRANSLATE_API_URL ||
+  "https://meerkat-api.goconstellation.com";
+
+// Ping the VPS translate queue after a successful save. The queue debounces
+// per article (2 min of quiet), so calling this on every autosave is cheap.
+// Never throws — a failed ping must not fail the save.
+async function pingTranslateQueue(articleId: string | null | undefined) {
+  if (!articleId) return;
+  try {
+    await fetch(`${TRANSLATE_API_URL}/translate/queue`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ articleId }),
+      signal: AbortSignal.timeout(3000),
+    });
+  } catch (err) {
+    console.warn(
+      `⚠️ translate queue ping failed for ${articleId}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
 export const handler: Handler = async (event) => {
   const method = event.httpMethod;
 
@@ -184,7 +209,7 @@ export const handler: Handler = async (event) => {
         .update(updatePayload)
         .eq("id", id)
         .select(
-          'id, received_article, updated_at, "word count", "flesch score", schema',
+          'id, article_id, received_article, updated_at, "word count", "flesch score", schema',
         )
         .single();
 
@@ -204,6 +229,9 @@ export const handler: Handler = async (event) => {
         receivedArticleTitle: updateData?.received_article?.title,
         receivedArticleMeta: updateData?.received_article?.meta,
       });
+
+      // Keep translations in sync with edits (debounced server-side).
+      await pingTranslateQueue(updateData?.article_id);
 
       return {
         statusCode: 200,
@@ -246,6 +274,9 @@ export const handler: Handler = async (event) => {
         body: JSON.stringify({ error: patchError.message }),
       };
     }
+
+    // Field updates (title tag, meta, slug…) also affect translations.
+    await pingTranslateQueue(articleId);
 
     return {
       statusCode: 200,

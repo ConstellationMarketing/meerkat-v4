@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { runPipeline } = require('./pipeline');
 const { runTranslation, getTranslationStatus } = require('./lib/translate');
+const { queueTranslation, startReconciler } = require('./lib/translate-queue');
 const { startBatch, cancelBatch, retryFailed, getBatchStatus, getActiveBatch, markOrphanedBatches } = require('./lib/batch');
 const frontendApi = require('./routes/frontend-api');
 
@@ -92,6 +93,19 @@ app.post('/translate', async (req, res) => {
   runTranslation(articleId, language)
     .then(() => console.log(`[Server] Translation complete: articleId=${articleId} lang=${language}`))
     .catch(err => console.error(`[Server] Translation failed: articleId=${articleId} lang=${language}:`, err));
+});
+
+// Debounced translation trigger — called by the autosave path on every save.
+// Translation (all languages) fires ~2 min after the article goes quiet.
+app.post('/translate/queue', (req, res) => {
+  const { articleId } = req.body;
+
+  if (!articleId) {
+    return res.status(400).json({ error: 'Missing required field: articleId' });
+  }
+
+  queueTranslation(articleId);
+  res.status(202).json({ status: 'queued', articleId });
 });
 
 // Poll translation status
@@ -486,4 +500,10 @@ app.listen(PORT, () => {
   // Mark them as 'orphaned' so the active-batch lock below can let new
   // batches proceed.
   markOrphanedBatches().catch(err => console.error('[Batch] Orphan sweep error:', err));
+
+  // Keep ES/VI translations in sync with article edits. Sweeps for missing,
+  // stale, stuck, and failed translations. Disable with TRANSLATE_RECONCILER=0.
+  if (process.env.TRANSLATE_RECONCILER !== '0') {
+    startReconciler();
+  }
 });
