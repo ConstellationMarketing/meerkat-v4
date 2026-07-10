@@ -7,7 +7,7 @@ const TRANSLATE_API_URL =
   "https://meerkat-api.goconstellation.com";
 
 // Ping the VPS translate queue after a successful save. The queue debounces
-// per article (2 min of quiet), so calling this on every autosave is cheap.
+// per article (30s of quiet), so calling this on every autosave is cheap.
 // Never throws — a failed ping must not fail the save.
 async function pingTranslateQueue(articleId: string | null | undefined) {
   if (!articleId) return;
