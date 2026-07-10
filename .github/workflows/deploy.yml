@@ -18,7 +18,7 @@ jobs:
           script: |
             set -euo pipefail
             cd /root/meerkat-service
-            git remote set-url origin https://x-access-token:$GH_TOKEN@github.com/ConstellationMarketing/meerkatv4.git
+            git remote set-url origin https://x-access-token:$GH_TOKEN@github.com/ConstellationMarketing/meerkat-v4.git
             git fetch origin main
             git reset --hard origin/main
             npm install --omit=dev

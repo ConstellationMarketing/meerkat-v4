@@ -1121,19 +1121,6 @@ async function runPipeline(payload) {
     try {
       await upsertArticle(articleRecord);
       console.log('[Pipeline] Supabase upsert success');
-
-      // Auto-translate every new article (ES + VI). Short delay, runs async
-      // through the shared translate queue; failures are picked up by the
-      // reconciler. Disable with AUTO_TRANSLATE=0.
-      if (process.env.AUTO_TRANSLATE !== '0') {
-        try {
-          const { queueTranslation } = require('./lib/translate-queue');
-          queueTranslation(articleId, { delayMs: 5000, reason: 'new-article' });
-          console.log('[Pipeline] Auto-translation queued (es, vi)');
-        } catch (err) {
-          console.error('[Pipeline] Failed to queue auto-translation:', err.message);
-        }
-      }
     } catch (err) {
       supabaseError = err.message;
       console.error('[Pipeline] Supabase upsert failed:', err.message);
@@ -1162,6 +1149,22 @@ async function runPipeline(payload) {
     }
   } else {
     console.log('[Pipeline] Skipping publish (SKIP_PUBLISH=1)');
+  }
+
+  // ─── 11. Auto-translate to all languages ──────────────────────────────────
+  // Queue ES + VI so translations are ready without an editor clicking
+  // "Translate". Goes through the shared translate queue (debounced,
+  // serialized, one Haiku call at a time); failures get 'failed' status and
+  // are retried by the reconciler. Later editor edits re-translate
+  // automatically via the same queue. Disable with AUTO_TRANSLATE=0.
+  if (!skipPublish && !supabaseError && process.env.AUTO_TRANSLATE !== '0') {
+    try {
+      const { queueTranslation } = require('./lib/translate-queue');
+      queueTranslation(articleId, { delayMs: 5000, reason: 'new-article' });
+      console.log('[Pipeline] Auto-translation queued (es, vi)');
+    } catch (err) {
+      console.error('[Pipeline] Failed to queue auto-translation:', err.message);
+    }
   }
 
   return {

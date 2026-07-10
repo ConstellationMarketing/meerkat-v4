@@ -115,6 +115,75 @@ function renderTranslationsBar(
   }).join("\n");
 }
 
+function renderField(label: string, value: string): string {
+  if (!value) return "";
+  return `<div class="field"><div class="field-label">${escapeHtml(
+    label,
+  )}</div><div class="field-value">${escapeHtml(value)}</div></div>`;
+}
+
+function copyBtn(target: string): string {
+  return `<button type="button" class="copy-btn" data-target="${target}" onclick="event.stopPropagation(); copySection(this)"><span>Copy</span></button>`;
+}
+
+function renderInfoPanels(opts: {
+  keyword: string;
+  clientName: string;
+  pageUrl: string;
+  urlSlug: string;
+  contentType: string;
+  wordCount: string;
+  version: string;
+  title: string;
+  meta: string;
+  schema: string;
+}): string {
+  const fields = [
+    renderField("Keyword", opts.keyword),
+    renderField("Client Name", opts.clientName),
+    renderField("Page URL", opts.pageUrl),
+    renderField("URL Slug", opts.urlSlug),
+    renderField("Content Type", opts.contentType),
+    renderField("Word Count", opts.wordCount),
+    renderField("Version", opts.version),
+  ].join("");
+
+  const metadataPanel = fields
+    ? `<section class="info-panel"><div class="panel-head collapsible" onclick="toggleSection(this)"><span class="panel-title"><span class="chevron">▾</span><h2>Metadata</h2></span>${copyBtn(
+        "copy-metadata",
+      )}</div><div id="copy-metadata" class="panel-body"><div class="field-grid">${fields}</div></div></section>`
+    : "";
+
+  const seoBody =
+    (opts.title
+      ? `<div class="seo-row"><div class="field-label">Title Tag <span class="count">${opts.title.length} chars</span></div><div class="field-value">${escapeHtml(
+          opts.title,
+        )}</div></div>`
+      : "") +
+    (opts.meta
+      ? `<div class="seo-row"><div class="field-label">Meta Description <span class="count">${opts.meta.length} chars</span></div><div class="field-value">${escapeHtml(
+          opts.meta,
+        )}</div></div>`
+      : "");
+
+  const seoPanel =
+    opts.title || opts.meta
+      ? `<section class="info-panel"><div class="panel-head collapsible" onclick="toggleSection(this)"><span class="panel-title"><span class="chevron">▾</span><h2>SEO Information</h2></span>${copyBtn(
+          "copy-seo",
+        )}</div><div id="copy-seo" class="panel-body">${seoBody}</div></section>`
+      : "";
+
+  const schemaPanel = opts.schema
+    ? `<section class="info-panel"><div class="panel-head collapsible" onclick="toggleSection(this)"><span class="panel-title"><span class="chevron">▾</span><h2>Schema</h2></span>${copyBtn(
+        "copy-schema",
+      )}</div><div id="copy-schema" class="panel-body"><pre class="schema">${escapeHtml(
+        opts.schema,
+      )}</pre></div></section>`
+    : "";
+
+  return metadataPanel + seoPanel + schemaPanel;
+}
+
 function renderPage(opts: {
   articleId: string;
   lang: Lang;
@@ -123,6 +192,14 @@ function renderPage(opts: {
   content: string;
   available: Set<Lang>;
   fallbackNotice: string | null;
+  keyword: string;
+  clientName: string;
+  pageUrl: string;
+  urlSlug: string;
+  contentType: string;
+  wordCount: string;
+  version: string;
+  schema: string;
 }): string {
   const cfg = LANG_CONFIG[opts.lang];
   const canonical = pathFor(opts.articleId, opts.lang);
@@ -235,6 +312,39 @@ function renderPage(opts: {
       gap: 8px;
     }
     footer a { color: var(--muted); }
+    .info-panel { border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin: 0 0 16px; background: #fafafa; }
+    .info-panel h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 0; }
+    .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .panel-head.collapsible { cursor: pointer; user-select: none; }
+    .panel-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .panel-title h2 { margin: 0; }
+    .chevron { display: inline-block; color: var(--muted); font-size: 12px; transition: transform 0.15s; }
+    .panel-head.collapsed .chevron { transform: rotate(-90deg); }
+    .full-article-head { margin: 24px 0 12px; }
+    .copy-btn {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--pill-fg);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .copy-btn:hover { background: var(--pill-bg); }
+    .copy-btn.copied { background: #ecfdf5; border-color: #6ee7b7; color: #047857; }
+    .field-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 24px; }
+    .field-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); margin-bottom: 2px; }
+    .field-value { font-size: 14px; color: var(--fg); word-break: break-word; }
+    .seo-row { margin-bottom: 12px; }
+    .seo-row:last-child { margin-bottom: 0; }
+    .count { text-transform: none; letter-spacing: 0; color: var(--accent); font-weight: 500; margin-left: 6px; }
+    pre.schema { background: #f3f4f6; border: 1px solid var(--border); border-radius: 6px; padding: 12px; overflow-x: auto; font-size: 12px; line-height: 1.5; margin: 0; white-space: pre-wrap; word-break: break-word; }
+    .full-article-label { font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 0; }
   </style>
 </head>
 <body>
@@ -243,7 +353,11 @@ function renderPage(opts: {
       ${renderTranslationsBar(opts.articleId, opts.lang, opts.available)}
     </header>
     ${opts.fallbackNotice ? `<div class="notice">${escapeHtml(opts.fallbackNotice)}</div>` : ""}
-    <article>
+    ${renderInfoPanels(opts)}
+    <div class="panel-head full-article-head"><div class="full-article-label">Full Article</div>${copyBtn(
+      "copy-article",
+    )}</div>
+    <article id="copy-article">
       <h1>${escapeHtml(opts.title)}</h1>
       ${opts.content /* trusted HTML from the editor pipeline */}
     </article>
@@ -252,6 +366,45 @@ function renderPage(opts: {
       <a href="/edit/${escapeAttr(opts.articleId)}">Open in editor</a>
     </footer>
   </div>
+  <script>
+    function toggleSection(head) {
+      var body = head.nextElementSibling;
+      if (!body) return;
+      var collapsed = head.classList.toggle('collapsed');
+      body.style.display = collapsed ? 'none' : '';
+    }
+    function copySection(btn) {
+      var id = btn.getAttribute('data-target');
+      var el = id ? document.getElementById(id) : null;
+      var text = el ? (el.innerText || el.textContent || '') : '';
+      var span = btn.querySelector('span');
+      var orig = span ? span.textContent : 'Copy';
+      function done() {
+        if (span) span.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(function () {
+          if (span) span.textContent = orig;
+          btn.classList.remove('copied');
+        }, 1500);
+      }
+      function fallback() {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(ta);
+        done();
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(fallback);
+      } else {
+        fallback();
+      }
+    }
+  </script>
 </body>
 </html>`;
 }
@@ -297,21 +450,7 @@ export const handler = async (event: any) => {
   const supabase = createSupabaseClient();
   const { data, error } = await supabase
     .from("article_outlines")
-    .select(
-      [
-        "article_id",
-        "client_name",
-        "keyword",
-        "received_article",
-        "translations",
-        "title_tag",
-        "meta_description",
-        "seo_title",
-        "seo_meta_description",
-        '"cleaned content"',
-        "html_content",
-      ].join(","),
-    )
+    .select("*")
     .eq("article_id", articleId)
     .maybeSingle();
 
@@ -374,6 +513,24 @@ export const handler = async (event: any) => {
     }
   }
 
+  const tForSlug = lang !== "en" ? (translations as any)?.[lang] : null;
+  const urlSlug =
+    (tForSlug && tForSlug.slug) || (data as any)["URL Slug"] || "";
+
+  let schemaStr = "";
+  const rawSchema = (data as any).schema ?? (data as any)["Schema"];
+  if (rawSchema != null && rawSchema !== "") {
+    try {
+      schemaStr = JSON.stringify(
+        typeof rawSchema === "string" ? JSON.parse(rawSchema) : rawSchema,
+        null,
+        2,
+      );
+    } catch {
+      schemaStr = String(rawSchema);
+    }
+  }
+
   const html = renderPage({
     articleId,
     lang,
@@ -382,6 +539,17 @@ export const handler = async (event: any) => {
     content,
     available,
     fallbackNotice,
+    keyword: (data as any).keyword || "",
+    clientName: (data as any).client_name || "",
+    pageUrl: (data as any)["Page URL"] || "",
+    urlSlug,
+    contentType: (data as any).template || "",
+    wordCount:
+      (data as any)["word count"] != null
+        ? String((data as any)["word count"])
+        : "",
+    version: (data as any).version || "",
+    schema: schemaStr,
   });
 
   return {

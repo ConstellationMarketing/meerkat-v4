@@ -71,7 +71,14 @@ export default function DevViewPage() {
         }).catch(() => {});
       }
     }
-  }, [outline]);
+    // Depend on the article identity, NOT the mutable `outline` state. The
+    // effect calls setOutline() to merge fresh translations, which creates a
+    // new object; depending on `outline` re-triggered the effect → refetch →
+    // setOutline → infinite loop for any article that HAS translations
+    // (Public/Client View hanging forever). Keying on the passed article id
+    // makes it run once per article.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [passedOutline?.articleId, passedOutline?.id]);
 
   if (isLoading) {
     return (

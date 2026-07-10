@@ -71,10 +71,21 @@ export const handler = async (event: any) => {
           })) || [],
       });
 
+      // Strip the heaviest columns the list view never displays. Since the
+      // translation backfill, `translations` (full ES + VI HTML) plus
+      // `cleaned content` bloated this list response to many megabytes, making
+      // the homepage slow to load. The editor/preview re-fetch full content by
+      // id, so the list doesn't need these.
+      const slim = (data || []).map((row: any) => {
+        const { translations, ...rest } = row;
+        delete (rest as any)["cleaned content"];
+        return rest;
+      });
+
       return {
         statusCode: 200,
         headers: corsHeaders,
-        body: JSON.stringify(data),
+        body: JSON.stringify(slim),
       };
     }
 
