@@ -96,7 +96,7 @@ app.post('/translate', async (req, res) => {
 });
 
 // Debounced translation trigger — called by the autosave path on every save.
-// Translation (all languages) fires ~2 min after the article goes quiet.
+// Translation (all languages) fires ~30s after the article goes quiet.
 app.post('/translate/queue', (req, res) => {
   const { articleId } = req.body;
 
