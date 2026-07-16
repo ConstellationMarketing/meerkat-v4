@@ -45,10 +45,17 @@ async function callClaude(systemPrompt, userPrompt, model = 'claude-haiku-4-5-20
 
   for (let attempt = 1; attempt <= MAX_API_RETRIES; attempt++) {
     try {
+      // Prompt caching: pass the SYSTEM prompt as a single content block
+      // with cache_control ephemeral. Anthropic caches the rendered
+      // system tokens; subsequent calls with the SAME resolved system
+      // prompt (e.g. multiple sections of the same article — same client,
+      // same keyword, same page type) hit the cache instead of paying
+      // full input-token price. No changes to .md prompt files — the
+      // rendered system prompt is what gets cached as-is.
       const msg = await client.messages.create({
         model,
         max_tokens: 4096,
-        system: systemPrompt,
+        system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
         messages: [{ role: 'user', content: userPrompt }]
       });
       return msg.content[0].text.trim();
