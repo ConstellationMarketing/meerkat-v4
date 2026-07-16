@@ -1,4 +1,4 @@
-SYSTEM_STABLE: Extract only the FAQ section from the provided HTML content.
+SYSTEM: Extract only the FAQ section from the provided HTML content.
 
 The FAQ section is identified by a heading that contains "Frequently Asked Questions" (case-insensitive). Do not assume a specific heading level (it may be h1, h2, h3, etc.).
 
@@ -21,7 +21,5 @@ Rules:
 - Do not summarize, rewrite, or modify the wording.
 - Do not add explanations, headings, or extra text.
 - Return only the formatted output section exactly as shown above.
-
-SYSTEM_VARS: (no per-article variables)
 
 USER: Content: {{htmlContent}}
