@@ -27,60 +27,28 @@ function fillTemplate(template, vars) {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? '');
 }
 
-// Parse SYSTEM_STABLE / SYSTEM_VARS / USER sections from a prompt file.
-// SYSTEM_STABLE is the cacheable style guide (byte-identical across all
-// articles); SYSTEM_VARS holds per-article context. Backwards compatible
-// with legacy SYSTEM:/USER: files — if SYSTEM_STABLE isn't present, the
-// whole SYSTEM block is treated as variable (uncached) content.
+// Parse SYSTEM/USER sections from prompt file
 function parsePrompt(template, vars) {
   const filled = fillTemplate(template, vars);
-  const stableMatch = filled.match(/^SYSTEM_STABLE:\s*([\s\S]+?)(?=\nSYSTEM_VARS:|\nUSER:)/m);
-  const varsMatch   = filled.match(/\nSYSTEM_VARS:\s*([\s\S]+?)(?=\nUSER:)/m);
-  const userMatch   = filled.match(/\nUSER:\s*([\s\S]+)$/m);
-  if (stableMatch) {
-    return {
-      systemStable: stableMatch[1].trim(),
-      systemVars:   varsMatch ? varsMatch[1].trim() : '',
-      user:         userMatch ? userMatch[1].trim() : filled,
-    };
-  }
-  // Legacy fallback — old SYSTEM:/USER: format. No caching.
-  const legacySystemMatch = filled.match(/^SYSTEM:\s*([\s\S]+?)(?=\nUSER:)/m);
+  const systemMatch = filled.match(/^SYSTEM:\s*([\s\S]+?)(?=\nUSER:)/m);
+  const userMatch = filled.match(/\nUSER:\s*([\s\S]+)$/m);
   return {
-    systemStable: '',
-    systemVars:   legacySystemMatch ? legacySystemMatch[1].trim() : '',
-    user:         userMatch ? userMatch[1].trim() : filled,
+    system: systemMatch ? systemMatch[1].trim() : '',
+    user: userMatch ? userMatch[1].trim() : filled
   };
 }
 
-// Call Claude and return text output. Accepts either:
-//   - a string (legacy: single uncached system prompt)
-//   - an object { stable, vars } — stable is cached with cache_control
-//     ephemeral, vars is passed as an uncached second block.
+// Call Claude and return text output
 async function callClaude(systemPrompt, userPrompt, model = 'claude-haiku-4-5-20251001') {
   const MAX_API_RETRIES = 3;
   const BASE_DELAY_MS = 5000;
-
-  // Build the system parameter as either a plain string (legacy path,
-  // uncached) or a multi-block array (cached stable prefix + uncached
-  // per-article vars). Anthropic's SDK accepts both.
-  const systemParam = (typeof systemPrompt === 'object' && systemPrompt !== null)
-    ? [
-        systemPrompt.stable
-          ? { type: 'text', text: systemPrompt.stable, cache_control: { type: 'ephemeral' } }
-          : null,
-        systemPrompt.vars
-          ? { type: 'text', text: systemPrompt.vars }
-          : null,
-      ].filter(Boolean)
-    : systemPrompt;
 
   for (let attempt = 1; attempt <= MAX_API_RETRIES; attempt++) {
     try {
       const msg = await client.messages.create({
         model,
         max_tokens: 4096,
-        system: systemParam,
+        system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }]
       });
       return msg.content[0].text.trim();
@@ -681,7 +649,7 @@ async function generateSection(payload, section) {
     wordCount: section.wordCount
   };
 
-  const { systemStable, systemVars, user } = parsePrompt(prompts['section-writer'], vars);
+  const { system, user } = parsePrompt(prompts['section-writer'], vars);
 
   // Cross-article dedup prevention: when CROSS_ARTICLE_DEDUP_PREVENT is on,
   // payload.priorPhrases carries sentences from this client's last 3 articles.
@@ -714,7 +682,7 @@ async function generateSection(payload, section) {
       userMsg += `\n\nPrevious output needs revision: ${issues.join(' ')}`;
     }
 
-    const output = await callClaude({ stable: systemStable, vars: systemVars }, userMsg, 'claude-sonnet-4-6');
+    const output = await callClaude(system, userMsg, 'claude-sonnet-4-6');
     const { rawScore, wordCount: outputWords } = scoreArticle(output);
     lastOutput = output;
     lastScore = rawScore;
