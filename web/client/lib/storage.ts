@@ -356,6 +356,9 @@ export async function getArticleOutlines(options?: {
 
       return {
         content: typeof contentCandidate === "string" ? contentCandidate : "",
+        // Preserved from /api/articles list rows, where the heavy content
+        // string is stripped server-side and replaced by this flag.
+        hasContent: Boolean((raw as any).hasContent),
         title:
           (raw as any).title ??
           (raw as any).seoTitle ??
@@ -420,8 +423,15 @@ export async function getArticleOutlines(options?: {
         uniqueByArticleId.set(key, a);
         continue;
       }
-      const existingHasContent = !!existing.receivedArticle?.content;
-      const currentHasContent = !!a.receivedArticle?.content;
+      // hasContent covers list rows served by /api/articles, which strips the
+      // heavy content string and sends a hasContent flag instead.
+      const existingHasContent = !!(
+        existing.receivedArticle?.content ||
+        (existing.receivedArticle as any)?.hasContent
+      );
+      const currentHasContent = !!(
+        a.receivedArticle?.content || (a.receivedArticle as any)?.hasContent
+      );
       if (currentHasContent && !existingHasContent) {
         uniqueByArticleId.set(key, a);
         continue;
@@ -528,6 +538,9 @@ export async function getAllArticlesPublic(): Promise<ArticleOutline[]> {
 
       return {
         content: typeof contentCandidate === "string" ? contentCandidate : "",
+        // Preserved from /api/articles list rows, where the heavy content
+        // string is stripped server-side and replaced by this flag.
+        hasContent: Boolean((raw as any).hasContent),
         title:
           (raw as any).title ??
           (raw as any).seoTitle ??
@@ -598,8 +611,15 @@ export async function getAllArticlesPublic(): Promise<ArticleOutline[]> {
         uniqueByArticleId.set(key, a);
         continue;
       }
-      const existingHasContent = !!existing.receivedArticle?.content;
-      const currentHasContent = !!a.receivedArticle?.content;
+      // hasContent covers list rows served by /api/articles, which strips the
+      // heavy content string and sends a hasContent flag instead.
+      const existingHasContent = !!(
+        existing.receivedArticle?.content ||
+        (existing.receivedArticle as any)?.hasContent
+      );
+      const currentHasContent = !!(
+        a.receivedArticle?.content || (a.receivedArticle as any)?.hasContent
+      );
       if (currentHasContent && !existingHasContent) {
         uniqueByArticleId.set(key, a);
         continue;

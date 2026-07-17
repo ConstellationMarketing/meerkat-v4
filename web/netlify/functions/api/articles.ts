@@ -79,10 +79,53 @@ export const handler = async (event: any) => {
           })) || [],
       });
 
+      // Replace each row's received_article with a light header-only version.
+      // The full English HTML per article pushed this list response past
+      // Netlify's 6MB function payload limit (~1,000+ articles), which makes
+      // Netlify drop the response entirely — the UI then shows 0 articles for
+      // every client. The list views only need title/meta/receivedAt plus a
+      // hasContent flag (for dedupe); the editor and article views fetch full
+      // content by id via get-article / getArticleOutlineById.
+      const lightReceived = (raw: any): any => {
+        if (raw == null) return null;
+        if (typeof raw === "string") {
+          try {
+            raw = JSON.parse(raw);
+          } catch {
+            return {
+              hasContent: raw.trim().length > 0,
+              content: null,
+              title: null,
+              meta: null,
+              receivedAt: null,
+            };
+          }
+        }
+        const content =
+          raw.content ?? raw.article ?? raw.body ?? raw.html ?? null;
+        return {
+          hasContent: typeof content === "string" && content.length > 0,
+          content: null,
+          title: raw.title ?? raw.seoTitle ?? raw.seo_title ?? null,
+          meta:
+            raw.meta ??
+            raw.seoMetaDescription ??
+            raw.seo_meta_description ??
+            null,
+          receivedAt:
+            raw.receivedAt ?? raw.timestamp ?? raw.received_at ?? null,
+        };
+      };
+
+      const slim = (data || []).map((row: any) => ({
+        ...row,
+        received_article: lightReceived(row.received_article),
+      }));
+
       return {
         statusCode: 200,
         headers: corsHeaders,
-        body: JSON.stringify(data || []),
+        body: JSON.stringify(slim),
       };
     }
 
