@@ -49,7 +49,7 @@ export const handler = async (event: any) => {
       const { data, error } = await supabase
         .from("article_outlines")
         .select(
-          'id, article_id, client_name, client_id, keyword, template, sections, created_at, updated_at, webhook_sent, received_article, schema, "word count", "flesch score", "Page URL", "URL Slug", user_id, version, title_tag, meta_description, page_update_type, page_url',
+          'id, article_id, client_name, client_id, keyword, template, sections, created_at, updated_at, webhook_sent, received_article, "Schema", "word count", "flesch score", "Page URL", "URL Slug", user_id, version, title_tag, meta_description, page_update_type, page_url',
         )
         .order("created_at", { ascending: false });
 
