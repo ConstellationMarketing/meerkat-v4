@@ -208,6 +208,16 @@ setTimeout(() => {
 // pipeline draft). Fetching them via select("*") made list responses balloon
 // to hundreds of MB and time out, leaving the sidebar empty. Views that need
 // translations or original content re-fetch a single article by id.
+// List-view projection for the direct-Supabase fallback (used when the
+// /api/articles endpoint fails). Two important choices, both driven by the
+// 2026-07-17 "0 articles for every client" incident:
+//   1. `Schema` is quoted with capital S — the column is case-sensitive in
+//      Postgres and unquoted `schema` errors with 42703 (undefined column).
+//   2. `received_article` is NOT selected as a whole; instead we project only
+//      the tiny metadata subfields via JSON path. Selecting the full column
+//      pulls ~12MB across the corpus and kills the Netlify function via the
+//      API path (and would kill this direct-Supabase path too for admins on
+//      slow connections). Content is fetched by-id when an article is opened.
 const ARTICLE_LIST_COLUMNS = [
   "id",
   "article_id",
@@ -219,8 +229,7 @@ const ARTICLE_LIST_COLUMNS = [
   "created_at",
   "updated_at",
   "webhook_sent",
-  "received_article",
-  "schema",
+  '"Schema"',
   '"word count"',
   '"flesch score"',
   '"Page URL"',
@@ -231,6 +240,9 @@ const ARTICLE_LIST_COLUMNS = [
   "meta_description",
   "page_update_type",
   "page_url",
+  "ra_title:received_article->>title",
+  "ra_meta:received_article->>meta",
+  "ra_received_at:received_article->>receivedAt",
 ].join(", ");
 
 export async function getArticleOutlines(options?: {
@@ -379,6 +391,23 @@ export async function getArticleOutlines(options?: {
     };
 
     const mapped = (data || []).map((row: any, idx: number) => {
+      // If the row came from the direct-Supabase fallback path with JSON-path
+      // aliases (ra_title / ra_meta / ra_received_at) rather than a full
+      // received_article object, reconstruct the shape here so downstream
+      // normalization treats both paths uniformly. Same shape the API path
+      // returns after its server-side reassembly.
+      if (
+        row.received_article == null &&
+        (row.ra_title != null || row.ra_received_at != null)
+      ) {
+        row.received_article = {
+          hasContent: true,
+          content: null,
+          title: row.ra_title ?? null,
+          meta: row.ra_meta ?? null,
+          receivedAt: row.ra_received_at ?? null,
+        };
+      }
       const receivedArticle = normalizeReceived(
         row.received_article,
         row.updated_at,
