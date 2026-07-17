@@ -76,15 +76,13 @@ export const handler = async (event: any) => {
         };
       }
 
-      console.log("✅ Successfully fetched articles:", {
-        count: data?.length || 0,
-        articles:
-          data?.map((a: any) => ({
-            id: a.id,
-            keyword: a.keyword,
-            user_id: a.user_id,
-          })) || [],
-      });
+      // Summary log only — do NOT map over every row for the log. On the
+      // full 2,255-article corpus, iterating the result set inside a log
+      // object built a massive intermediate structure (3+ fields × every
+      // row) that was killing the function ("invalid status code returned
+      // from lambda: 0" — the 2026-07-17 outage) before the response ever
+      // got built.
+      console.log(`✅ Successfully fetched articles: count=${data?.length || 0}`);
 
       // Reassemble received_article from the JSON-path aliased fields so the
       // client-side shape stays identical to the previous version — same
