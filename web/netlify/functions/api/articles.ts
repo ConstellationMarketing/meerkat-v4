@@ -40,16 +40,23 @@ export const handler = async (event: any) => {
       console.log("📚 Articles GET request");
 
       const supabase = createSupabaseClient();
-      // Fetch only the columns the list views use. Previously this was
-      // select("*") with a post-fetch trim, but since the full translation
-      // backfill (July 2026) that meant pulling hundreds of MB of ES/VI HTML
-      // from Supabase into the function on every list request — slow and
-      // capable of timing out the function entirely. Excludes `translations`
-      // and `cleaned content`; single-article endpoints fetch those by id.
+      // Fetch only the columns the list views use. Previously this projected
+      // `received_article` as a whole JSONB column, which carries the full
+      // editor-saved HTML per row — ~12MB across the 2,255-article corpus.
+      // Combined with the other projected columns (~4MB) that put the raw
+      // fetch at ~16MB, which was killing the Netlify function (Supabase
+      // fetch too slow / too much intermediate memory, resulting in a 502
+      // "invalid status code returned from lambda: 0" and the app showing
+      // 0 articles for every client — 2026-07-17 incident).
+      //
+      // Instead, project only the tiny received_article metadata that the
+      // list views actually need (title, meta, receivedAt) via Supabase JSON
+      // path aliases. Content itself is only ever fetched by-id via
+      // get-article / getArticleOutlineById when a user opens an article.
       const { data, error } = await supabase
         .from("article_outlines")
         .select(
-          'id, article_id, client_name, client_id, keyword, template, sections, created_at, updated_at, webhook_sent, received_article, "Schema", "word count", "flesch score", "Page URL", "URL Slug", user_id, version, title_tag, meta_description, page_update_type, page_url',
+          'id, article_id, client_name, client_id, keyword, template, sections, created_at, updated_at, webhook_sent, "Schema", "word count", "flesch score", "Page URL", "URL Slug", user_id, version, title_tag, meta_description, page_update_type, page_url, ra_title:received_article->>title, ra_meta:received_article->>meta, ra_received_at:received_article->>receivedAt',
         )
         .order("created_at", { ascending: false });
 
@@ -79,48 +86,27 @@ export const handler = async (event: any) => {
           })) || [],
       });
 
-      // Replace each row's received_article with a light header-only version.
-      // The full English HTML per article pushed this list response past
-      // Netlify's 6MB function payload limit (~1,000+ articles), which makes
-      // Netlify drop the response entirely — the UI then shows 0 articles for
-      // every client. The list views only need title/meta/receivedAt plus a
-      // hasContent flag (for dedupe); the editor and article views fetch full
-      // content by id via get-article / getArticleOutlineById.
-      const lightReceived = (raw: any): any => {
-        if (raw == null) return null;
-        if (typeof raw === "string") {
-          try {
-            raw = JSON.parse(raw);
-          } catch {
-            return {
-              hasContent: raw.trim().length > 0,
-              content: null,
-              title: null,
-              meta: null,
-              receivedAt: null,
-            };
-          }
-        }
-        const content =
-          raw.content ?? raw.article ?? raw.body ?? raw.html ?? null;
+      // Reassemble received_article from the JSON-path aliased fields so the
+      // client-side shape stays identical to the previous version — same
+      // `receivedArticle: { title, meta, receivedAt, content: null, hasContent }`
+      // structure the client mapper expects. Content is never shipped here;
+      // per-article endpoints fetch it by id.
+      const slim = (data || []).map((row: any) => {
+        const { ra_title, ra_meta, ra_received_at, ...rest } = row;
+        const hasReceived = ra_received_at != null || ra_title != null;
         return {
-          hasContent: typeof content === "string" && content.length > 0,
-          content: null,
-          title: raw.title ?? raw.seoTitle ?? raw.seo_title ?? null,
-          meta:
-            raw.meta ??
-            raw.seoMetaDescription ??
-            raw.seo_meta_description ??
-            null,
-          receivedAt:
-            raw.receivedAt ?? raw.timestamp ?? raw.received_at ?? null,
+          ...rest,
+          received_article: hasReceived
+            ? {
+                hasContent: true,
+                content: null,
+                title: ra_title ?? null,
+                meta: ra_meta ?? null,
+                receivedAt: ra_received_at ?? null,
+              }
+            : null,
         };
-      };
-
-      const slim = (data || []).map((row: any) => ({
-        ...row,
-        received_article: lightReceived(row.received_article),
-      }));
+      });
 
       return {
         statusCode: 200,
