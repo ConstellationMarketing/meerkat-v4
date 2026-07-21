@@ -65,7 +65,7 @@ This article is a **{{template}}** page. Follow the page-type-specific rules bel
 - FAQ answers must be concise — 2 sentences maximum per answer. Never exceed 2 sentences. Each answer should be roughly 2 lines of text.
 ## Required Section Template
 Every article must include ALL of the following sections in this order:
-1. Introduction (2–3 concise, reader-focused sentences, ~40–60 words total — NOT a long multi-paragraph block. Lead with the direct answer to the keyword/topic. Include the H1, and on **practice pages only** the tagline. Do NOT lead with or center the firm, and do NOT use emotional scene-setting.)
+1. Introduction — **page-type specific** (see "Introduction — Opening"): **Supporting/resource pages** → 2–3 concise, reader-focused sentences (~40–60 words), no firm, no homepage link. **Practice pages** → a fuller 200–300 word empathetic opening that presents the firm as the trusted solution and links the homepage. Include the H1, and on practice pages the tagline.
 2. How We Can Help (Problem → Agitation → Solution: expand on the problem, show how the firm solves it — NOT a repeat of the introduction)
 3. Why Choose Us (trust signals only: credentials, experience, results — NOT service descriptions)
 4. What to Expect (the legal process, steps, and timelines — NOT firm services)
@@ -144,8 +144,8 @@ If your assigned section's brief overlaps with another section's brief (e.g., bo
 - Do NOT repeat in the introduction any details that will be the main focus of a later section. If "What to Expect" covers the legal process, the introduction should NOT preview those steps.
 
 ## Introduction — Tone (Neutral, Informational, Not Promotional)
-- The introduction must read as **informational**, not as a sales pitch. The intro explains the legal issue, the firm's role, and what the reader will learn — it does NOT pitch services with conversion language.
-- Do NOT lead with or center the firm in the intro. On **practice pages** the firm name MAY appear once as plain factual identification if it fits naturally; on **supporting/resource pages** the firm name must NOT appear in the intro at all. The intro is reader-focused, not firm-focused.
+- **Supporting/resource pages:** the intro reads as **informational**, not a sales pitch — it explains the topic and answers the question, with no firm pitch. **Practice pages:** the intro is warm and empathetic and presents the firm as the trusted solution (per the Practice Page SOP), but still avoids the hard-sell conversion phrases listed below (those belong in the CTA).
+- **Supporting/resource pages:** the firm name must NOT appear in the intro at all — keep it purely informational and reader-focused. **Practice pages:** the intro SHOULD introduce {{clientName}} as the trusted solution and link the homepage, per the Practice Page SOP.
 - The following conversion-style phrases are BANNED in the introduction (they belong only in the CTA section):
   - "free consultation", "free case review", "no-obligation consultation"
   - "call now", "call today", "call us today"
@@ -167,12 +167,12 @@ If your assigned section's brief overlaps with another section's brief (e.g., bo
   - "The legal system can be complex/confusing..."
   - "No one expects to face [legal issue]..."
 - Instead, lead with the specific fact, process step, or legal concept the paragraph is about. Emotion and empathy can follow — but the point comes first.
+- **Exception — practice-page introduction only:** the Practice Page SOP calls for an empathetic opening that names the reader's situation (e.g., "If you're facing DUI charges in Nassau County…"). That empathetic framing is allowed **only in the practice-page intro** — everywhere else (all body sections, and the entire supporting-page article) lead with the point, not emotional framing.
 
-## Introduction — Opening
-- The **entire** introduction must be 2–3 concise, reader-focused sentences (~40–60 words total) — not a multi-paragraph block.
-- The first sentence must directly answer the keyword/topic — state the core answer, with no scene-setting and no emotional framing.
-- Keep it neutral and educational. Do NOT front-load the firm, credentials, or a sales pitch.
-- The opening sentence must be distinct per article — do NOT reuse the same opening formula or near-identical wording across articles for the same client.
+## Introduction — Opening (page-type specific)
+- **Supporting/resource pages:** the ENTIRE introduction is 2–3 concise, reader-focused sentences (~40–60 words). Lead with the direct answer to the keyword. Do NOT mention the firm, do NOT link the homepage, and use no emotional scene-setting — purely informational.
+- **Practice pages:** the introduction is a fuller **200–300 word** opening (per the Practice Page SOP). Empathize with the reader's situation using the keyword (e.g., "If you're facing DUI charges in Nassau County…"), present {{clientName}} as the trusted solution, speak directly to the reader ("you"), set up the problem, and **link the homepage**. Warm, understanding tone — but not a hard sell (keep "free consultation"/"call now" in the CTA). Lead naturally into "How We Can Help."
+- In both cases, the opening sentence must be distinct per article — do NOT reuse the same opening formula or near-identical wording across articles for the same client.
 
 ## Tagline Rules
 - If this is a **practice** page: you MUST include exactly one tagline (7 words or fewer) in the Introduction section ONLY
@@ -235,9 +235,9 @@ Content must feel rooted in the client's real-world location. Every article must
 
 ## Answer Surfacing
 The most important information must appear **immediately** — readers should not have to scroll to understand the page.
-- The **introduction** must lead with the direct answer to the keyword/topic in its first sentence. Keep it to 2–3 sentences (see "Introduction — Opening") — do NOT pad it to hit a word count.
+- **Supporting/resource pages:** the introduction must lead with the direct answer to the keyword in its first sentence and stay 2–3 sentences (see "Introduction — Opening"). **Practice pages:** the introduction instead opens empathetically and presents the firm as the solution (per SOP) — it need not lead with a direct factual answer.
 - **Every H2 section** must open with a **1-2 sentence mini-answer** that summarizes the key point before going into detail. Do not open sections with background, definitions, or context — lead with the answer.
-- Never start the introduction with a definition, legal history, or general overview. Lead with the direct answer.
+- Never start the introduction with a dry definition, legal history, or general overview.
 
 ## Link Distribution
 - When mentioning legal topics or concepts in body text, these are natural anchor points for links
@@ -280,7 +280,7 @@ The most important information must appear **immediately** — readers should no
 
 ## Minimum Word Count
 - The total article (excluding FAQ) must be at least 1,000 words
-- Each non-FAQ **body** section should contribute meaningfully — aim for at least 150 words per section. **Exception: the Introduction is intentionally short (2–3 sentences) and is exempt from this minimum.**
+- Each non-FAQ **body** section should contribute meaningfully — aim for at least 150 words per section. **Supporting-page introductions are intentionally short (2–3 sentences) and are exempt from this minimum; practice-page introductions target 200–300 words per the SOP.**
 - The FAQ section should be additional words on top of the 1,000-word body minimum
 
 --
