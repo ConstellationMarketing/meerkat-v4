@@ -65,7 +65,7 @@ This article is a **{{template}}** page. Follow the page-type-specific rules bel
 - FAQ answers must be concise — 2 sentences maximum per answer. Never exceed 2 sentences. Each answer should be roughly 2 lines of text.
 ## Required Section Template
 Every article must include ALL of the following sections in this order:
-1. Introduction (MINIMUM 200 words and MINIMUM 3 paragraphs, target 250–300 words. This is strictly enforced — introductions under 200 words or with fewer than 3 paragraphs are unacceptable. Include: the H1, the tagline if practice page, a clear statement of the legal problem, how the firm helps, and a brief preview of what the reader will learn.)
+1. Introduction (2–3 concise, reader-focused sentences, ~40–60 words total — NOT a long multi-paragraph block. Lead with the direct answer to the keyword/topic. Include the H1, and on **practice pages only** the tagline. Do NOT lead with or center the firm, and do NOT use emotional scene-setting.)
 2. How We Can Help (Problem → Agitation → Solution: expand on the problem, show how the firm solves it — NOT a repeat of the introduction)
 3. Why Choose Us (trust signals only: credentials, experience, results — NOT service descriptions)
 4. What to Expect (the legal process, steps, and timelines — NOT firm services)
@@ -145,7 +145,7 @@ If your assigned section's brief overlaps with another section's brief (e.g., bo
 
 ## Introduction — Tone (Neutral, Informational, Not Promotional)
 - The introduction must read as **informational**, not as a sales pitch. The intro explains the legal issue, the firm's role, and what the reader will learn — it does NOT pitch services with conversion language.
-- The firm name MUST appear within the first 100 words (per Local Signals + Answer Surfacing rules) but only as factual identification — not wrapped in marketing claims.
+- Do NOT lead with or center the firm in the intro. On **practice pages** the firm name MAY appear once as plain factual identification if it fits naturally; on **supporting/resource pages** the firm name must NOT appear in the intro at all. The intro is reader-focused, not firm-focused.
 - The following conversion-style phrases are BANNED in the introduction (they belong only in the CTA section):
   - "free consultation", "free case review", "no-obligation consultation"
   - "call now", "call today", "call us today"
@@ -169,8 +169,9 @@ If your assigned section's brief overlaps with another section's brief (e.g., bo
 - Instead, lead with the specific fact, process step, or legal concept the paragraph is about. Emotion and empathy can follow — but the point comes first.
 
 ## Introduction — Opening
-- The first sentence of the introduction must directly answer the H1's question or topic — state the core answer, not scene-setting.
-- The opening paragraph must be 2-3 sentences. The other required elements (firm name, location, what is at stake, brief preview) follow in subsequent short paragraphs — never packed into one long block.
+- The **entire** introduction must be 2–3 concise, reader-focused sentences (~40–60 words total) — not a multi-paragraph block.
+- The first sentence must directly answer the keyword/topic — state the core answer, with no scene-setting and no emotional framing.
+- Keep it neutral and educational. Do NOT front-load the firm, credentials, or a sales pitch.
 - The opening sentence must be distinct per article — do NOT reuse the same opening formula or near-identical wording across articles for the same client.
 
 ## Tagline Rules
@@ -195,7 +196,8 @@ If your assigned section's brief overlaps with another section's brief (e.g., bo
 - Avoid outcome promises — use effort-based language: "we work toward the best possible outcome"
 - Do NOT use absolute language about legal processes or protections — avoid "ensures", "guarantees", "always", "never", "must", "will" when describing legal outcomes or protections. Use "may help", "is designed to", "can", "often", "typically" instead
 - Do NOT state that hiring an attorney "ensures" or "guarantees" any outcome — use "can help protect", "works to safeguard", "advocates for"
-- When citing statutes: ONLY cite statutes you are certain exist. Use the full official citation format (e.g., "O.C.G.A. § 40-6-391" not just "Georgia Code"). If you are not confident a statute number is correct, reference the legal concept without a specific citation (e.g., "Under Michigan employment law" instead of fabricating a statute number)
+- **Do NOT cite specific statute numbers, code sections, or case names** (e.g., avoid "O.C.G.A. § 40-6-391", "§ 76-a", "Section 1983"). The model cannot reliably verify exact citations and wrong citations are a serious accuracy problem. Instead, reference the law in plain language by concept and jurisdiction (e.g., "under Georgia DUI law", "New Jersey's anti-SLAPP protections"). Never invent a statute number, code section, or case name.
+- Avoid overly broad or absolute legal statements. Keep claims accurate and qualified ("in many cases", "typically", "may") rather than sweeping generalizations that may not hold across situations.
 
 ## Page-Type Section Rules
 - **Supporting/resource pages** must NOT include a "Why Choose Us" section. Supporting pages are educational and informational — firm promotion belongs only in the soft CTA. If you are writing a supporting page and the section instructions ask for "Why Choose Us," replace it with additional educational content relevant to the keyword (e.g., deeper legal analysis, additional scenarios, or a comparison of approaches).
@@ -208,10 +210,10 @@ If your assigned section's brief overlaps with another section's brief (e.g., bo
 ## Local Signals
 Content must feel rooted in the client's real-world location. Every article must include location-specific details:
 - **First 100 words**: Include a city or state reference derived from the keyword or client details
-- **Body sections**: Reference local courts, agencies, institutions, statutes, or jurisdictional details where relevant (e.g., "Filed through the Fulton County Clerk of Court" or "Under Georgia Code §40-6-391")
+- **Body sections**: Reference local courts, agencies, institutions, or jurisdictional details where relevant (e.g., "Filed through the Fulton County Clerk of Court" or "under Georgia DUI law") — describe the law in plain language; do NOT cite specific statute numbers
 - **CTA**: Include a local signal (e.g., "Contact our Atlanta criminal defense attorney" not just "Contact our attorney")
 - Integrate local signals naturally throughout headers, body paragraphs, FAQ answers, and CTAs — do not cluster them in one place
-- Use city, county, region, local courts, and state-specific statutes as appropriate
+- Use city, county, region, local courts, and state-specific legal context as appropriate (in plain language, not statute numbers)
 - Do NOT stuff or force local references — they must read naturally and serve the content
 
 ## Paragraph Length
@@ -221,17 +223,21 @@ Content must feel rooted in the client's real-world location. Every article must
 - Short paragraphs improve readability, scannability, and user engagement
 - Do NOT use a standalone one-sentence paragraph for dramatic effect (e.g., "The stakes are real." / "Do not wait."). Every body paragraph must carry at least two informational sentences. The single Introduction tagline is the only exception.
 
+## Scannability — Use Bullets for Legal Concepts
+- Break sets of legal concepts, requirements, factors, options, or steps out of long narrative paragraphs into **scannable bullet points** or numbered lists. Do not bury a list of 3+ discrete items inside a paragraph.
+- Use a **numbered list** for anything sequential (process steps, stages) and keep the steps in correct chronological order.
+- Use **bullets** for non-sequential sets (eligibility factors, types, documents needed, pros/cons).
+- Keep narrative prose for explanation — but surface the key points as a scannable list.
+
+## Comparisons — Show Side-by-Side Where Readers Need Them
+- When the topic involves two or more related options readers commonly weigh against each other (e.g., revocable vs. irrevocable trust, codicil vs. new will, Chapter 7 vs. Chapter 13 bankruptcy, contested vs. uncontested divorce), include a brief **side-by-side comparison** of the key differences — as a short bulleted contrast or a simple two-column list.
+- Only include a comparison when it genuinely helps the reader decide or understand; do not force one where the topic has no natural counterpart.
+
 ## Answer Surfacing
 The most important information must appear **immediately** — readers should not have to scroll to understand the page.
-- **Introduction (first 100-150 words)** must surface all 6 elements:
-  1. What the legal issue is
-  2. What the service is
-  3. Who the firm is (firm name)
-  4. Where they serve (city/state)
-  5. Why it matters / what is at stake
-  6. What the reader should do next
+- The **introduction** must lead with the direct answer to the keyword/topic in its first sentence. Keep it to 2–3 sentences (see "Introduction — Opening") — do NOT pad it to hit a word count.
 - **Every H2 section** must open with a **1-2 sentence mini-answer** that summarizes the key point before going into detail. Do not open sections with background, definitions, or context — lead with the answer.
-- Never start the introduction with a definition, legal history, or general overview. Lead with the specific service and the client's problem.
+- Never start the introduction with a definition, legal history, or general overview. Lead with the direct answer.
 
 ## Link Distribution
 - When mentioning legal topics or concepts in body text, these are natural anchor points for links
@@ -274,7 +280,7 @@ The most important information must appear **immediately** — readers should no
 
 ## Minimum Word Count
 - The total article (excluding FAQ) must be at least 1,000 words
-- Each non-FAQ section should contribute meaningfully to this total — aim for at least 150 words per section
+- Each non-FAQ **body** section should contribute meaningfully — aim for at least 150 words per section. **Exception: the Introduction is intentionally short (2–3 sentences) and is exempt from this minimum.**
 - The FAQ section should be additional words on top of the 1,000-word body minimum
 
 --
