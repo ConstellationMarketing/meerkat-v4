@@ -1,5 +1,6 @@
 import { Handler } from "@netlify/functions";
 import { supabase } from "../../server/supabase";
+import { slugify, validateSlug } from "../../shared/slug";
 
 const TRANSLATE_API_URL =
   process.env.TRANSLATE_API_URL ||
@@ -53,6 +54,57 @@ export const handler: Handler = async (event) => {
   }
 
   try {
+    // Slug update from the SEO view: normalize + validate + persist the
+    // user-editable slug, and recompute the Page URL from it. The bot slug is
+    // only a default; whatever is saved here is what publishing uses.
+    if (body.slug !== undefined && body.articleId) {
+      const normalized = slugify(body.slug);
+      const check = validateSlug(normalized, { pageType: body.pageType });
+      if (!check.valid) {
+        return {
+          statusCode: 400,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "Invalid slug", errors: check.errors }),
+        };
+      }
+      const { data: row } = await supabase
+        .from("article_outlines")
+        .select('"Page URL"')
+        .eq("article_id", body.articleId)
+        .single();
+      let pageUrl: string | null = null;
+      try {
+        const existing = row && (row as any)["Page URL"];
+        if (existing) pageUrl = new URL(existing).origin + "/" + normalized;
+      } catch {
+        pageUrl = null;
+      }
+      const slugUpdate: Record<string, unknown> = {
+        "URL Slug": normalized,
+        updated_at: new Date().toISOString(),
+      };
+      if (pageUrl) slugUpdate["Page URL"] = pageUrl;
+      const { data, error } = await supabase
+        .from("article_outlines")
+        .update(slugUpdate)
+        .eq("article_id", body.articleId)
+        .select('article_id, "URL Slug", "Page URL"')
+        .single();
+      if (error) {
+        return {
+          statusCode: 500,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: error.message }),
+        };
+      }
+      await pingTranslateQueue(body.articleId);
+      return {
+        statusCode: 200,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ success: true, slug: normalized, pageUrl, data }),
+      };
+    }
+
     // Handle POST requests from ArticleEditor (update html_content and create revisions)
     if (method === "POST") {
       const {
