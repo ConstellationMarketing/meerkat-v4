@@ -11,6 +11,18 @@ export function slugify(input: string): string {
     .replace(/^-|-$/g, '');
 }
 
+/**
+ * Lenient transform for live typing in an input: lowercases and converts spaces
+ * to hyphens, but KEEPS hyphens (including a trailing one mid-typing) so the
+ * user can actually type "-". Run the strict slugify() on save/blur.
+ */
+export function slugifyInput(input: string): string {
+  return (input || '')
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '');
+}
+
 export interface SlugValidationResult {
   valid: boolean;
   errors: string[];

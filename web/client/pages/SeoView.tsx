@@ -5,7 +5,7 @@ import { ArticleOutline } from "@/types/article";
 import { useState, useEffect } from "react";
 import { getArticleOutlineById, saveArticleOutline } from "@/lib/storage";
 import { useToast } from "@/hooks/use-toast";
-import { slugify, validateSlug } from "../../shared/slug";
+import { slugify, slugifyInput, validateSlug } from "../../shared/slug";
 
 function getFleschScoreColor(scoreString: string | undefined): {
   bgColor: string;
@@ -260,7 +260,7 @@ export default function SeoView() {
       return "";
     }
   })();
-  const slugValidation = validateSlug(editedSlug || "", { pageType: outline.template });
+  const slugValidation = validateSlug(slugify(editedSlug || ""), { pageType: outline.template });
 
   // Try to get title and meta from receivedArticle, fall back to schema meta
   let titleTagValue = outline.receivedArticle?.title || "";
@@ -552,12 +552,12 @@ export default function SeoView() {
                           <input
                             type="text"
                             value={editedSlug}
-                            onChange={(e) => setEditedSlug(slugify(e.target.value))}
+                            onChange={(e) => setEditedSlug(slugifyInput(e.target.value))}
                             placeholder="my-article-slug"
                             className="w-full px-3 py-2 bg-background border border-border/30 rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                           />
                           <div className="text-xs text-muted-foreground break-words">
-                            Published URL: {slugOrigin}/{editedSlug || "…"}
+                            Published URL: {slugOrigin}/{slugify(editedSlug) || "…"}
                           </div>
                           {!slugValidation.valid && (
                             <ul className="text-xs text-red-600 list-disc pl-4">
