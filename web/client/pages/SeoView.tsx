@@ -5,6 +5,7 @@ import { ArticleOutline } from "@/types/article";
 import { useState, useEffect } from "react";
 import { getArticleOutlineById, saveArticleOutline } from "@/lib/storage";
 import { useToast } from "@/hooks/use-toast";
+import { slugify, validateSlug } from "../../shared/slug";
 
 function getFleschScoreColor(scoreString: string | undefined): {
   bgColor: string;
@@ -39,6 +40,7 @@ export default function SeoView() {
   const [isEditingSeo, setIsEditingSeo] = useState(false);
   const [editedTitle, setEditedTitle] = useState("");
   const [editedMeta, setEditedMeta] = useState("");
+  const [editedSlug, setEditedSlug] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
   const loadArticle = async () => {
@@ -53,6 +55,7 @@ export default function SeoView() {
       setOutline(found);
       setEditedTitle(found?.receivedArticle?.title || "");
       setEditedMeta(found?.receivedArticle?.meta || "");
+      setEditedSlug(((found as any)?.["URL Slug"] as string) || "");
     } catch (error) {
       console.error("Error loading article:", error);
       toast({
@@ -75,8 +78,9 @@ export default function SeoView() {
     if (outline && !isEditingSeo) {
       setEditedTitle(outline.receivedArticle?.title || "");
       setEditedMeta(outline.receivedArticle?.meta || "");
+      setEditedSlug(((outline as any)?.["URL Slug"] as string) || "");
     }
-  }, [outline?.receivedArticle?.title, outline?.receivedArticle?.meta, isEditingSeo]);
+  }, [outline?.receivedArticle?.title, outline?.receivedArticle?.meta, (outline as any)?.["URL Slug"], isEditingSeo]);
 
   const copyToClipboard = (text: string, sectionId: string) => {
     try {
@@ -99,6 +103,17 @@ export default function SeoView() {
       toast({
         title: "Error",
         description: "No article found to save",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const normalizedSlug = slugify(editedSlug || "");
+    const slugCheck = validateSlug(normalizedSlug, { pageType: outline.template });
+    if (!slugCheck.valid) {
+      toast({
+        title: "Invalid slug",
+        description: slugCheck.errors.join(" "),
         variant: "destructive",
       });
       return;
@@ -132,6 +147,24 @@ export default function SeoView() {
       await saveArticleOutline(updatedOutline);
       console.log("✅ Save to Supabase successful!");
 
+      // Persist the user-editable slug. The server normalizes + validates it
+      // and recomputes the Page URL so publishing uses the user-set slug.
+      const slugRes = await fetch("/.netlify/functions/update-article", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          articleId: outline.articleId,
+          slug: normalizedSlug,
+          pageType: outline.template,
+        }),
+      });
+      if (!slugRes.ok) {
+        const err = await slugRes.json().catch(() => ({}));
+        throw new Error(
+          err.errors ? err.errors.join(" ") : err.error || "Failed to save slug",
+        );
+      }
+
       // Update local outline state immediately with the new values
       setOutline(updatedOutline);
       console.log("✅ Local state updated with new values");
@@ -161,6 +194,7 @@ export default function SeoView() {
   const handleCancelSeo = () => {
     setEditedTitle(outline?.receivedArticle?.title || "");
     setEditedMeta(outline?.receivedArticle?.meta || "");
+    setEditedSlug(((outline as any)?.["URL Slug"] as string) || "");
     setIsEditingSeo(false);
   };
 
@@ -214,6 +248,16 @@ export default function SeoView() {
     }
   };
   const schemaContent = getFormattedSchema();
+
+  const slugOrigin = (() => {
+    try {
+      const pu = (outline as any)?.["Page URL"] as string | undefined;
+      return pu ? new URL(pu).origin : "";
+    } catch {
+      return "";
+    }
+  })();
+  const slugValidation = validateSlug(editedSlug || "", { pageType: outline.template });
 
   // Try to get title and meta from receivedArticle, fall back to schema meta
   let titleTagValue = outline.receivedArticle?.title || "";
@@ -494,6 +538,39 @@ export default function SeoView() {
                           </div>
                         )}
                       </div>
+                    </div>
+                    {/* URL Slug (editable) */}
+                    <div className="mt-6">
+                      <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                        URL Slug
+                      </label>
+                      {isEditingSeo ? (
+                        <div className="space-y-2">
+                          <input
+                            type="text"
+                            value={editedSlug}
+                            onChange={(e) => setEditedSlug(slugify(e.target.value))}
+                            placeholder="my-article-slug"
+                            className="w-full px-3 py-2 bg-background border border-border/30 rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                          />
+                          <div className="text-xs text-muted-foreground break-words">
+                            Published URL: {slugOrigin}/{editedSlug || "…"}
+                          </div>
+                          {!slugValidation.valid && (
+                            <ul className="text-xs text-red-600 list-disc pl-4">
+                              {slugValidation.errors.map((er, i) => (
+                                <li key={i}>{er}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="bg-muted/30 border border-border/30 rounded-lg p-4 text-sm text-foreground break-words">
+                          {editedSlug || (
+                            <span className="text-muted-foreground italic">—</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
