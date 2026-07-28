@@ -137,6 +137,9 @@ export default function SeoView() {
           receivedAt: outline.receivedArticle?.receivedAt || new Date().toISOString(),
         },
       };
+      // Carry the new slug into the saved outline so the local cache isn't
+      // stale after save (the server call below is authoritative for the DB).
+      (updatedOutline as any)["URL Slug"] = normalizedSlug;
 
       console.log("📝 Saving updated outline to Supabase:", updatedOutline);
       console.log("  ├─ New Title to save:", editedTitle || "(empty)");

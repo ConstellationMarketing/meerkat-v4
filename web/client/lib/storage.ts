@@ -948,13 +948,13 @@ export async function getArticleOutlineById(
       try {
         let { data: row } = await supabase
           .from("article_outlines")
-          .select("translations, title_tag, version")
+          .select('translations, title_tag, version, "URL Slug", "Page URL"')
           .eq("id", id)
           .maybeSingle();
         if (!row) {
           const res = await supabase
             .from("article_outlines")
-            .select("translations, title_tag, version")
+            .select('translations, title_tag, version, "URL Slug", "Page URL"')
             .eq("article_id", id)
             .maybeSingle();
           row = res.data;
@@ -975,6 +975,15 @@ export async function getArticleOutlineById(
           if (row.version && !localData.version) {
             localData.version = row.version;
             console.log("✅ Merged version from Supabase into localStorage article:", row.version);
+          }
+          // Slug is user-editable and saved server-side, so Supabase is the
+          // source of truth — always take the latest so a freshly edited slug
+          // reflects instead of showing the stale localStorage copy.
+          if ((row as any)["URL Slug"] != null) {
+            (localData as any)["URL Slug"] = (row as any)["URL Slug"];
+          }
+          if ((row as any)["Page URL"] != null) {
+            (localData as any)["Page URL"] = (row as any)["Page URL"];
           }
         }
       } catch (e) {
