@@ -1,10 +1,18 @@
 'use strict'
 const  {
-  normalizePath
+  normalizePath, parseWebsiteField
 }
 = require('./sitemap')
 function domainFromWebsite(website)  {
-  return new URL(website).hostname.replace(/^www\./i, '')
+  let sites
+  try  {
+    sites = parseWebsiteField(website)
+  }
+  catch  {
+    throw new Error('no usable website for dataforseo target')
+  }
+  if (!sites.length) throw new Error('no usable website for dataforseo target')
+  return new URL(sites[0]).hostname.replace(/^www\./i, '')
 }
 function itemPath(item)  {
   const serp = item?.ranked_serp_element?.serp_item ||  {
@@ -49,13 +57,7 @@ function mapDataForSeoResponse(payload, sitePages)  {
 async function fetchDataForSeo(client, sitePages, credentials, fetchImpl = global.fetch)  {
   const response = await fetchImpl('https://api.dataforseo.com/v3/dataforseo_labs/google/ranked_keywords/live',  {
     method: 'POST', headers:  {
-      Authorization: `Basic ${Buffer.from(`$ {
-        credentials.login
-      }
-      :$ {
-        credentials.password
-      }
-      `).toString('base64')}`, 'Content-Type': 'application/json'
+      Authorization: 'Basic ' + Buffer.from(credentials.login + ':' + credentials.password).toString('base64'), 'Content-Type': 'application/json'
     }, body: JSON.stringify([ {
       target: domainFromWebsite(client.website), location_code: 2840, language_code: 'en', limit: 1000
     }
