@@ -23,5 +23,6 @@ jobs:
             git reset --hard origin/main
             npm install --omit=dev
             pm2 restart meerkat --update-env
+            pm2 startOrRestart ecosystem.config.js --only meerkat-crawler --update-env || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

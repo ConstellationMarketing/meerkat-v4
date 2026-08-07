@@ -1074,6 +1074,7 @@ async function runPipeline(payload) {
 
   // ─── 9. Upsert to Supabase ────────────────────────────────────────────────
   const skipPublish = process.env.SKIP_PUBLISH === '1';
+  const skipExternal = process.env.SKIP_PUBLISH_EXTERNAL === '1';
   if (skipPublish) {
     console.log('[Pipeline] SKIP_PUBLISH=1 — writing HTML to test-output/ instead');
     const outputDir = path.join(__dirname, 'test-output');
@@ -1137,8 +1138,9 @@ async function runPipeline(payload) {
   }
 
   // ─── 10. Publish to internal.goconstellation.com ─────────────────────────
+  // SKIP_PUBLISH_EXTERNAL suppresses external sends without blocking Supabase.
   let publishedUrl = null;
-  if (!skipPublish) {
+  if (!skipPublish && !skipExternal) {
     try {
       publishedUrl = await publishArticle({
       articleId,
@@ -1154,6 +1156,8 @@ async function runPipeline(payload) {
     } catch (err) {
       console.error('[Pipeline] Publish failed:', err.message);
     }
+  } else if (skipExternal && !skipPublish) {
+    console.log('[Pipeline] Skipping internal.goconstellation publish (SKIP_PUBLISH_EXTERNAL=1)');
   } else {
     console.log('[Pipeline] Skipping publish (SKIP_PUBLISH=1)');
   }
