@@ -10,6 +10,7 @@ const { runPipeline } = require('./pipeline');
 const { runTranslation, getTranslationStatus } = require('./lib/translate');
 const { queueTranslation, startReconciler } = require('./lib/translate-queue');
 const { startBatch, cancelBatch, retryFailed, getBatchStatus, getActiveBatch, markOrphanedBatches } = require('./lib/batch');
+const { enrichArticles } = require('./lib/enrich');
 const frontendApi = require('./routes/frontend-api');
 
 const app = express();
@@ -160,144 +161,12 @@ app.post('/batch/start', async (req, res) => {
       });
     }
 
+    const enrichedArticles = (await enrichArticles(articles)).map(article => ({
+      ...article,
+      userId: userId || null,
+    }));
+
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY, { db: { schema: "meerkat" } });
-
-    // Resolve clientInfo, website, clientId from client_folders. Fetch ALL
-    // folders so we can fuzzy-match user-supplied names against the canonical
-    // values — punctuation differences ("Robert R Hopkins" vs "Robert R.
-    // Hopkins", "Chip Herrington Attorney" vs "Chip Herrington, Attorney")
-    // shouldn't block validation. Mirrors the template-alias treatment.
-    const uniqueClients = [...new Set(articles.map(a => a.clientName))];
-    const { data: folders, error: folderError } = await supabase
-      .from('client_folders')
-      .select('name, id, website, client_info');
-
-    if (folderError) {
-      return res.status(500).json({ error: `Failed to lookup clients: ${folderError.message}` });
-    }
-
-    const normalizeClient = (s) => (s || '')
-      .toString()
-      .toLowerCase()
-      .replace(/[.,]/g, '')
-      .replace(/[-_]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    const clientAliasToCanonical = {};
-    const clientByCanonical = {};
-    (folders || []).forEach(f => {
-      const key = normalizeClient(f.name);
-      if (key) clientAliasToCanonical[key] = f.name;
-      clientByCanonical[f.name] = { clientId: f.id, website: f.website, clientInfo: f.client_info };
-    });
-
-    const resolveClient = (raw) => clientAliasToCanonical[normalizeClient(raw)] || null;
-
-    const unresolved = uniqueClients.filter(c => resolveClient(c) === null);
-    if (unresolved.length > 0) {
-      return res.status(400).json({
-        error: `${unresolved.length} client(s) not found in client_folders`,
-        unresolved
-      });
-    }
-
-    // Resolve template sections. Fetch ALL templates so we can fuzzy-match
-    // user-supplied values against both `id` and `name` (e.g., spreadsheet
-    // entries like "Practice Page" or "Supporting Page" should resolve to
-    // their canonical IDs without forcing editors to remember the slug
-    // format).
-    const { data: templates, error: templateError } = await supabase
-      .from('templates')
-      .select('id, name, sections');
-
-    if (templateError) {
-      return res.status(500).json({ error: `Failed to lookup templates: ${templateError.message}` });
-    }
-
-    // Build an alias → canonical-id map. Each template contributes its id and
-    // its name (and several normalized variants) so common CSV inputs
-    // resolve. Normalization: lowercase, hyphens/underscores → spaces, then
-    // collapse whitespace.
-    const normalize = (s) => (s || '')
-      .toString()
-      .toLowerCase()
-      .replace(/[-_]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    const aliasToId = {};
-    (templates || []).forEach(t => {
-      if (!t.id) return;
-      [t.id, t.name].forEach(alias => {
-        const key = normalize(alias);
-        if (key) aliasToId[key] = t.id;
-      });
-    });
-
-    const templateMap = {};
-    (templates || []).forEach(t => { templateMap[t.id] = t.sections; });
-
-    // Resolve each article's user-supplied template value to its canonical id.
-    // Default to practice-page when blank.
-    const resolveTemplate = (raw) => {
-      const candidate = (raw && raw.trim()) ? raw : 'practice-page';
-      return aliasToId[normalize(candidate)] || null;
-    };
-
-    // Build the set of unique resolved IDs (or null for unresolved) to surface
-    // unresolved values back to the caller before kicking off generation.
-    const unresolvedRawValues = [...new Set(
-      articles
-        .filter(a => resolveTemplate(a.template) === null)
-        .map(a => a.template || '(blank)')
-    )];
-    if (unresolvedRawValues.length > 0) {
-      return res.status(400).json({
-        error: `${unresolvedRawValues.length} template value(s) not found in Supabase templates table`,
-        unresolvedTemplates: unresolvedRawValues,
-        hint: 'Use one of the template names or IDs from Settings → Templates. "Practice Page" / "Supporting Page" / "practice-page" / "supporting-page" all resolve.',
-      });
-    }
-
-    // All resolved — also fail-loud if a resolved id maps to empty sections.
-    const resolvedIds = [...new Set(articles.map(a => resolveTemplate(a.template)))];
-    const emptySectionIds = resolvedIds.filter(
-      id => !templateMap[id] || !Array.isArray(templateMap[id]) || templateMap[id].length === 0
-    );
-    if (emptySectionIds.length > 0) {
-      return res.status(400).json({
-        error: `${emptySectionIds.length} template(s) resolved but have no sections`,
-        unresolvedTemplates: emptySectionIds,
-        hint: 'Edit the template via Settings → Templates and add at least one section.',
-      });
-    }
-
-    // Enrich each article. Use the canonical client name so downstream
-    // storage (article_outlines.client_name, batch_jobs metadata) is
-    // consistent regardless of how the user typed it in the CSV.
-    const enrichedArticles = articles.map(a => {
-      const canonicalName = resolveClient(a.clientName);
-      const client = clientByCanonical[canonicalName];
-      const templateId = resolveTemplate(a.template);
-      const sections = templateMap[templateId] || [];
-
-      return {
-        keyword: a.keyword,
-        clientName: canonicalName,
-        clientId: client.clientId,
-        clientInfo: client.clientInfo || '',
-        website: client.website || '',
-        template: templateId === 'practice-page' ? 'Practice Page' : 'Supporting/Resource Page',
-        userId: userId || null,
-        sections: sections.map((s, idx) => ({
-          sectionNumber: idx + 1,
-          name: s.title || s.name || `Section ${idx + 1}`,
-          details: s.description || s.details || '',
-          wordCount: s.wordCount || null,
-        })),
-      };
-    });
 
     // Create batch_jobs row
     const { error: insertError } = await supabase.from('batch_jobs').insert({
@@ -326,7 +195,7 @@ app.post('/batch/start', async (req, res) => {
 
   } catch (err) {
     console.error('[Server] Batch start error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json(err.body || { error: err.message });
   }
 });
 
@@ -469,6 +338,7 @@ app.post('/batch/retry', async (req, res) => {
 
 // ─── Frontend API routes (ported from Netlify Functions) ──────────────────
 app.use('/api', frontendApi);
+app.use('/os', require('./routes/os-api'));
 
 // Also mount get-article and get-article-revisions at their legacy paths
 // so the frontend can call /.netlify/functions/get-article → /get-article
@@ -483,6 +353,7 @@ app.get('*', (req, res) => {
   // Don't serve index.html for API or health check routes
   if (req.path.startsWith('/api/') || req.path.startsWith('/generate') ||
       req.path.startsWith('/translate') || req.path.startsWith('/batch') ||
+      req.path.startsWith('/os') ||
       req.path.startsWith('/.netlify/')) {
     return res.status(404).json({ error: 'Not found' });
   }
