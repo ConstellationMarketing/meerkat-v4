@@ -1,6 +1,6 @@
 'use strict';
 
-const { parseChangeReport, htmlToText } = require('./lib/optimize');
+const { parseChangeReport, htmlToText, extractRecommendations } = require('./lib/optimize');
 
 let passed = 0;
 let failed = 0;
@@ -56,6 +56,31 @@ test('htmlToText decodes supported entities', () => {
 
 test('htmlToText collapses whitespace', () => {
   equal(htmlToText('  Alpha\n\t Beta   Gamma  '), 'Alpha Beta Gamma');
+});
+
+test('extractRecommendations collects failed checks with fixes, merging shared fix texts', () => {
+  const ocb = {
+    raw: {
+      checks: {
+        A1: { status: 'fail', fix: 'Shorten the title.', detail: 'x' },
+        A2: { status: 'fail', fix: 'Shorten the title.', detail: 'y' },
+        A5: { status: 'fail', fix: 'Rewrite the meta.', detail: 'z' },
+        A4: { status: 'pass', detail: '' },
+        B9: { status: 'fail', detail: 'no fix text here' },
+        _error: { status: 'na', detail: 'checks blew up' },
+      },
+    },
+  };
+  equal(extractRecommendations(ocb), [
+    { checks: ['A1', 'A2'], fix: 'Shorten the title.' },
+    { checks: ['A5'], fix: 'Rewrite the meta.' },
+  ]);
+});
+
+test('extractRecommendations is empty on null OCB, missing checks, or all-pass', () => {
+  equal(extractRecommendations(null), []);
+  equal(extractRecommendations({ decision: 'NEW CONTENT', raw: {} }), []);
+  equal(extractRecommendations({ raw: { checks: { A1: { status: 'pass' } } } }), []);
 });
 
 if (failed > 0) {
