@@ -89,8 +89,11 @@ async function insertMetrics(supabase, rows)  {
     const  {
       error
     }
+    // merge-duplicates, not ignore: a same-day re-run (e.g. the top_keywords
+    // backfill) must refresh the row, and dated snapshots stay append-only
+    // across dates either way.
     = await supabase.from('meerkat_page_metrics').upsert(batch,  {
-      onConflict: 'client_id,url,metric_date,source', ignoreDuplicates: true
+      onConflict: 'client_id,url,metric_date,source', ignoreDuplicates: false
     });
     if (error) throw new Error(`metrics insert: ${error.message}`)
   }
