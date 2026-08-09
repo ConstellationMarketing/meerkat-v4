@@ -640,6 +640,15 @@ function qualityGate(content, sections, template, wordCount, formatWarnings = []
   return { pass: true, issues };
 }
 
+function optimizationPreamble(opt) {
+  return 'THIS IS AN OPTIMIZATION OF AN EXISTING PAGE, not a new article.\n'
+    + `Existing page URL: ${opt.url}\n`
+    + (opt.guidance ? `Editor guidance: ${opt.guidance}\n` : '')
+    + 'Current page content (plain text, may be truncated):\n---\n' + opt.beforeText + '\n---\n'
+    + 'Preserve what already works (accurate facts, existing service descriptions, tone that matches the firm). '
+    + 'Fix what is thin: expand shallow sections, add the FAQ if missing, strengthen local specificity, keep the same page purpose.';
+}
+
 // Generate one section with QC retry loop
 async function generateSection(payload, section) {
   const vars = {
@@ -677,7 +686,9 @@ async function generateSection(payload, section) {
   const minWords = targetWords ? Math.floor(targetWords * 0.8) : null;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    let userMsg = user + priorPhrasesBlock;
+    let userMsg = payload.optimization
+      ? optimizationPreamble(payload.optimization) + '\n\n' + user + priorPhrasesBlock
+      : user + priorPhrasesBlock;
     if (attempt > 0) {
       const issues = [];
       if (lastScore !== null && lastScore < 70) {
@@ -757,7 +768,7 @@ async function runPipeline(payload) {
   console.log(`[Pipeline] Generating ${sections.length} sections in parallel...`);
   const sectionResults = await Promise.all(
     sections.map(section =>
-      generateSection({ articleId, clientId, clientName, clientInfo, website, keyword, template, priorPhrases }, section)
+      generateSection({ articleId, clientId, clientName, clientInfo, website, keyword, template, priorPhrases, optimization: payload.optimization }, section)
         .catch(err => {
           console.error(`Section ${section.sectionNumber} failed:`, err.message);
           return { output: `[Section ${section.sectionNumber} generation failed]`, fleschScore: 0, sectionNumber: section.sectionNumber };
