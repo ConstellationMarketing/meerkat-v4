@@ -37,19 +37,28 @@ function mapDataForSeoResponse(payload, sitePages)  {
     const path = itemPath(item);
     if (!path) continue
     const current = groups.get(path) ||  {
-      keywords_count: 0, top10_count: 0, etv: 0
+      keywords_count: 0, top10_count: 0, etv: 0, kws: []
     }, serp = item.ranked_serp_element?.serp_item ||  {
     }
     current.keywords_count++;
     if (Number(serp.rank_absolute) <= 10) current.top10_count++;
     current.etv += Number(serp.etv) || 0;
+    const keyword = item.keyword_data?.keyword
+    if (keyword) current.kws.push( {
+      keyword, rank: Number(serp.rank_absolute) || null, sv: item.keyword_data?.keyword_info?.search_volume ?? null
+    })
     groups.set(path, current)
   }
   const pagesByPath = new Map((sitePages || []).map(p => [normalizePath(p.path), p]))
   return [...groups].flatMap(([path, value]) =>  {
     const page = pagesByPath.get(path);
+    const  {
+      kws, ...counts
+    }
+    = value
     return page ? [ {
-      url: page.url, ...value, etv: Math.round(value.etv * 100) / 100
+      url: page.url, ...counts, etv: Math.round(value.etv * 100) / 100,
+      top_keywords: kws.sort((a, b) => (a.rank ?? 1e9) - (b.rank ?? 1e9)).slice(0, 5)
     }
     ] : []
   })
