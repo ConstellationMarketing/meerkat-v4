@@ -640,10 +640,19 @@ function qualityGate(content, sections, template, wordCount, formatWarnings = []
   return { pass: true, issues };
 }
 
+function recommendationLines(recs) {
+  return (recs || []).map(r => `- [${(r.checks || []).join(', ')}] ${r.fix}`).join('\n');
+}
+
 function optimizationPreamble(opt) {
+  const recs = (opt.recommendations || []).length
+    ? 'SEO AUDIT OF THE LIVE PAGE — the optimization bot graded it and these checks failed. Your rewrite must resolve every content-level finding below:\n'
+      + recommendationLines(opt.recommendations) + '\n'
+    : '';
   return 'THIS IS AN OPTIMIZATION OF AN EXISTING PAGE, not a new article.\n'
     + `Existing page URL: ${opt.url}\n`
     + (opt.guidance ? `Editor guidance: ${opt.guidance}\n` : '')
+    + recs
     + 'Current page content (plain text, may be truncated):\n---\n' + opt.beforeText + '\n---\n'
     + 'Preserve what already works (accurate facts, existing service descriptions, tone that matches the firm). '
     + 'Fix what is thin: expand shallow sections, add the FAQ if missing, strengthen local specificity, keep the same page purpose.';
@@ -810,10 +819,17 @@ async function runPipeline(payload) {
       'claude-haiku-4-5-20251001'
     ).catch(err => { console.error('Internal links failed:', err.message); return '[]'; }),
 
-    callClaude(
-      ...Object.values(parsePrompt(prompts['title-meta'], { keyword, htmlContent })),
-      'claude-haiku-4-5-20251001'
-    ).catch(err => { console.error('Title/meta failed:', err.message); return '{"titleTag":"","description":""}'; })
+    (() => {
+      // Optimization jobs: the OCB's failed checks (title/meta ones especially,
+      // A1–A6) must shape the generated title tag and meta description.
+      const p = parsePrompt(prompts['title-meta'], { keyword, htmlContent });
+      const recs = payload.optimization?.recommendations || [];
+      const user = recs.length
+        ? 'The live page being optimized failed these SEO checks. Resolve every one that concerns the title tag or meta description:\n'
+          + recommendationLines(recs) + '\n\n' + p.user
+        : p.user;
+      return callClaude(p.system, user, 'claude-haiku-4-5-20251001');
+    })().catch(err => { console.error('Title/meta failed:', err.message); return '{"titleTag":"","description":""}'; })
   ]);
 
   // ─── 4. Parse and merge links ──────────────────────────────────────────────
