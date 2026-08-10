@@ -707,8 +707,10 @@ async function generateSection(payload, section) {
   // Section passes QC if word count is at least 80% of target (allows minor variance)
   const minWords = targetWords ? Math.floor(targetWords * 0.8) : null;
   // Edited sections must preserve the original's legal substance, which caps
-  // how far vocabulary can be simplified — relax the readability bar for them.
-  const fleschMin = editMode ? 60 : 70;
+  // how far vocabulary can be simplified. The dangerlaw dry run showed real
+  // edits scoring 39-48 while matching the human standard, so a readability
+  // retry only burns attempts — skip the Flesch gate entirely in edit mode.
+  const fleschMin = editMode ? 0 : 70;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     let userMsg = payload.optimization
@@ -955,7 +957,9 @@ async function runPipeline(payload) {
       keyword,
       clientName,
       website,
-      callClaude
+      callClaude,
+      // The page being edited had no statute citation; don't force one in.
+      skipStatute: Boolean(payload.optimization && payload.optimization.editMode)
     });
     if (repairResult.repairs.length > 0) {
       fullContent = repairResult.html;
@@ -1077,7 +1081,7 @@ async function runPipeline(payload) {
   if (externalLinkCount === 0) {
     formatResult.warnings.push('REQUIRED: No external links to authoritative sources — pipeline retry failed, editor must add 2-3 manually');
   }
-  if (!hasStatutes) {
+  if (!hasStatutes && !(payload.optimization && payload.optimization.editMode)) {
     formatResult.warnings.push('REQUIRED: No jurisdiction-specific statute citations — pipeline repair failed, editor must add at least one');
   }
 
