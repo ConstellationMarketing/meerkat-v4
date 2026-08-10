@@ -179,6 +179,17 @@ test('extractPageSections yields the fallback signal on an unstructured page', (
   equal(parsed.sections.length, 0);
 });
 
+test('extractPageSections strips head, hero buttons, and badge/location widget sections', () => {
+  const html = '<head><title>Speed Up Your Visa - ATT LAW</title></head>'
+    + '<h1>Real Heading</h1><p>GET IN TOUCH</p><p>GET IN TOUCH NOW</p><p>A real intro sentence about the topic follows here.</p>'
+    + '<h2>As Featured In:</h2><p>Boston Globe and several other outlets have covered this firm many times before.</p>'
+    + '<h2>Office Locations</h2><p>Austin office at 100 Main St, Houston office at 200 Elm St, and a Dallas office too.</p>'
+    + '<h2>Real Section</h2><p>Long enough body text for this section to count as genuine page content today.</p>';
+  const parsed = extractPageSections(html);
+  equal(parsed.intro.text, 'A real intro sentence about the topic follows here.');
+  equal(parsed.sections.map(s => s.heading), ['Real Section']);
+});
+
 if (failed > 0) {
   console.error(`\n${failed} test(s) failed; ${passed} passed`);
   process.exit(1);
