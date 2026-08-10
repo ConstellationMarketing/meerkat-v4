@@ -26,6 +26,7 @@ Background Information: {{clientInfo}}
 - Make sure 2-4 sentences of introduction follow, telling the reader what the page covers and why it matters to them. No conversion language ("call now", "free consultation") in the opening.
 
 ## OUTPUT
+- Before returning, scan your draft: if any sentence still uses "always", "never", "must", "cannot", "will", or "guarantees" to describe a legal outcome or protection, revise that sentence first.
 - Clean markdown only — no HTML tags, no horizontal rules, no code fences, and no commentary about what you changed.
 - Section 1 starts with the # H1; every other section starts with its ## heading.
 - Do not fabricate links or URLs; a separate pass inserts links.

@@ -781,6 +781,7 @@ async function runPipeline(payload) {
 
   // Edit-mode optimizations keep the page's existing H1 (the human-optimized
   // reference kept it); lockH1ToKeyword no-ops on a falsy keyword.
+  const isEditMode = Boolean(payload.optimization && payload.optimization.editMode);
   const lockKw = payload.optimization && payload.optimization.keepH1 ? null : keyword;
 
   // Cross-article dedup prevention: fetch this client's recent phrases once,
@@ -904,15 +905,20 @@ async function runPipeline(payload) {
   console.log('[Pipeline] Running whole-article structural review...');
   let reviewResult = { issues: [], fixed_article: '' };
   try {
-    const reviewRaw = await callClaude(
-      ...Object.values(parsePrompt(prompts['article-review'], {
-        htmlContent: fullContent,
-        template: template || 'practice',
-        clientName: clientName || '',
-        keyword: keyword || ''
-      })),
-      'claude-sonnet-4-6'
-    );
+    const reviewPrompt = parsePrompt(prompts['article-review'], {
+      htmlContent: fullContent,
+      template: template || 'practice',
+      clientName: clientName || '',
+      keyword: keyword || ''
+    });
+    // Edit-mode optimizations preserve the live page: the reviewer must not
+    // enforce template section rules against sections the page already has
+    // (the attlaw dry run deleted the firm's own "How We Can Help" section).
+    const reviewUser = isEditMode
+      ? 'THIS ARTICLE IS AN OPTIMIZATION OF AN EXISTING LIVE PAGE. Its sections mirror the live page and must ALL survive review: do NOT remove, relocate, or rewrite-away any section, even where a template rule says the section type does not belong on this page type, and do NOT shorten an existing CTA section for being promotional. Still fix broken paragraphs, duplicated content, bad links, and formatting.\n\n'
+        + reviewPrompt.user
+      : reviewPrompt.user;
+    const reviewRaw = await callClaude(reviewPrompt.system, reviewUser, 'claude-sonnet-4-6');
     reviewResult = parseJSON(reviewRaw);
 
     if (reviewResult.issues && reviewResult.issues.length > 0) {
@@ -950,6 +956,12 @@ async function runPipeline(payload) {
   }
 
   // ─── 5c. Targeted structural repair ────────────────────────────────────
+  // Every repair in this pass enforces new-article template shape (intro
+  // length, firm name in intro, CTA length, statute citation) — all wrong for
+  // an edit-mode optimization, whose shape is the live page's own.
+  if (isEditMode) {
+    console.log('[Pipeline] Skipping structural repair (edit-mode optimization)');
+  } else {
   console.log('[Pipeline] Running targeted structural repair...');
   try {
     const repairResult = await repairStructuralIssues(fullContent, {
@@ -957,9 +969,7 @@ async function runPipeline(payload) {
       keyword,
       clientName,
       website,
-      callClaude,
-      // The page being edited had no statute citation; don't force one in.
-      skipStatute: Boolean(payload.optimization && payload.optimization.editMode)
+      callClaude
     });
     if (repairResult.repairs.length > 0) {
       fullContent = repairResult.html;
@@ -988,6 +998,7 @@ async function runPipeline(payload) {
   } catch (e) {
     console.error('Structural repair failed:', e.message);
     // Non-fatal — continue with current content
+  }
   }
 
   // ─── 6. Legal ethics compliance ───────────────────────────────────────────
