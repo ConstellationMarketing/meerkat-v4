@@ -18,7 +18,7 @@ const client = new Anthropic();
 // Load prompts at startup
 const PROMPTS_DIR = path.join(__dirname, 'prompts');
 const prompts = {};
-['section-writer', 'external-links', 'internal-links', 'title-meta', 'legal-compliance', 'schema-generator', 'slug-url', 'article-review'].forEach(name => {
+['section-writer', 'optimize-section', 'external-links', 'internal-links', 'title-meta', 'legal-compliance', 'schema-generator', 'slug-url', 'article-review'].forEach(name => {
   prompts[name] = fs.readFileSync(path.join(PROMPTS_DIR, `${name}.md`), 'utf8');
 });
 
@@ -595,7 +595,7 @@ const TEMPLATE_WORD_TARGETS = {
 };
 
 // Pre-upsert quality gate — returns { pass, issues[] }
-function qualityGate(content, sections, template, wordCount, formatWarnings = []) {
+function qualityGate(content, sections, template, wordCount, formatWarnings = [], wordTarget = null) {
   const issues = [];
 
   // 1. Check for failed sections
@@ -616,7 +616,7 @@ function qualityGate(content, sections, template, wordCount, formatWarnings = []
   }
 
   // 3. Article-level word count gate
-  const target = TEMPLATE_WORD_TARGETS[template] || TEMPLATE_WORD_TARGETS['practice'];
+  const target = wordTarget || TEMPLATE_WORD_TARGETS[template] || TEMPLATE_WORD_TARGETS['practice'];
   const minWords = Math.round(target * 0.5);
   if (wordCount < minWords) {
     issues.push(`Word count ${wordCount} below minimum ${minWords} (50% of ${target} target)`);
@@ -644,22 +644,34 @@ function recommendationLines(recs) {
   return (recs || []).map(r => `- [${(r.checks || []).join(', ')}] ${r.fix}`).join('\n');
 }
 
-function optimizationPreamble(opt) {
+function optimizationPreamble(opt, { includeBefore = true } = {}) {
   const recs = (opt.recommendations || []).length
     ? 'SEO AUDIT OF THE LIVE PAGE — the optimization bot graded it and these checks failed. Your rewrite must resolve every content-level finding below:\n'
       + recommendationLines(opt.recommendations) + '\n'
     : '';
-  return 'THIS IS AN OPTIMIZATION OF AN EXISTING PAGE, not a new article.\n'
+  let out = 'THIS IS AN OPTIMIZATION OF AN EXISTING PAGE, not a new article.\n'
     + `Existing page URL: ${opt.url}\n`
     + (opt.guidance ? `Editor guidance: ${opt.guidance}\n` : '')
-    + recs
-    + 'Current page content (plain text, may be truncated):\n---\n' + opt.beforeText + '\n---\n'
-    + 'Preserve what already works (accurate facts, existing service descriptions, tone that matches the firm). '
-    + 'Fix what is thin: expand shallow sections, add the FAQ if missing, strengthen local specificity, keep the same page purpose.';
+    + recs;
+  if (includeBefore) {
+    // Compose-mode sections (template fallback, or CTA/FAQ additions in edit
+    // mode) see the whole page so what they write fits it.
+    out += 'Current page content (plain text, may be truncated):\n---\n' + opt.beforeText + '\n---\n'
+      + 'Preserve what already works (accurate facts, existing service descriptions, tone that matches the firm). '
+      + 'Fix what is thin: expand shallow sections, add the FAQ if missing, strengthen local specificity, keep the same page purpose.';
+  } else {
+    // Edit-mode sections carry their own full original text; the audit
+    // findings above are page-wide, so scope them.
+    out += 'Apply only the findings above that concern the section you are editing; the rest belong to other sections.';
+  }
+  return out;
 }
 
 // Generate one section with QC retry loop
 async function generateSection(payload, section) {
+  // Edit mode: the section carries its own original text and gets the
+  // edit-in-place prompt instead of the compose-from-scratch section writer.
+  const editMode = Boolean(payload.optimization && payload.optimization.editMode && section.originalText);
   const vars = {
     keyword: payload.keyword,
     clientName: payload.clientName,
@@ -671,10 +683,11 @@ async function generateSection(payload, section) {
     sectionNumber: section.sectionNumber,
     sectionName: section.name || section.title || '',
     details: section.details || section.description || '',
-    wordCount: section.wordCount
+    wordCount: section.wordCount,
+    originalText: section.originalText || ''
   };
 
-  const { system, user } = parsePrompt(prompts['section-writer'], vars);
+  const { system, user } = parsePrompt(prompts[editMode ? 'optimize-section' : 'section-writer'], vars);
 
   // Cross-article dedup prevention: when CROSS_ARTICLE_DEDUP_PREVENT is on,
   // payload.priorPhrases carries sentences from this client's last 3 articles.
@@ -693,14 +706,18 @@ async function generateSection(payload, section) {
   const targetWords = section.wordCount ? parseInt(section.wordCount, 10) : null;
   // Section passes QC if word count is at least 80% of target (allows minor variance)
   const minWords = targetWords ? Math.floor(targetWords * 0.8) : null;
+  // Edited sections must preserve the original's legal substance, which caps
+  // how far vocabulary can be simplified — relax the readability bar for them.
+  const fleschMin = editMode ? 60 : 70;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     let userMsg = payload.optimization
-      ? optimizationPreamble(payload.optimization) + '\n\n' + user + priorPhrasesBlock
+      ? optimizationPreamble(payload.optimization, { includeBefore: !editMode }) + '\n\n' + user
+        + (editMode ? '' : priorPhrasesBlock)
       : user + priorPhrasesBlock;
     if (attempt > 0) {
       const issues = [];
-      if (lastScore !== null && lastScore < 70) {
+      if (lastScore !== null && lastScore < fleschMin) {
         issues.push(`Flesch score was ${lastScore}/100 — shorten sentences, simplify vocabulary.`);
       }
       if (minWords && lastWordCount < minWords) {
@@ -715,7 +732,7 @@ async function generateSection(payload, section) {
     lastScore = rawScore;
     lastWordCount = outputWords;
 
-    const fleschOk = rawScore >= 70;
+    const fleschOk = rawScore >= fleschMin;
     const wordCountOk = !minWords || outputWords >= minWords;
 
     if (fleschOk && wordCountOk) break;
@@ -760,6 +777,10 @@ async function runPipeline(payload) {
 
   console.log(`[Pipeline] Starting: articleId=${articleId}, keyword="${keyword}", sections=${sections.length}`);
 
+  // Edit-mode optimizations keep the page's existing H1 (the human-optimized
+  // reference kept it); lockH1ToKeyword no-ops on a falsy keyword.
+  const lockKw = payload.optimization && payload.optimization.keepH1 ? null : keyword;
+
   // Cross-article dedup prevention: fetch this client's recent phrases once,
   // pass to every parallel section call. No-op (returns []) unless
   // CROSS_ARTICLE_DEDUP_PREVENT=1 in env.
@@ -796,7 +817,7 @@ async function runPipeline(payload) {
   htmlContent = stripPlaceholders(htmlContent, clientName);
   htmlContent = stripLinksFromHeadings(htmlContent);
   htmlContent = fixMalformedH3(htmlContent);
-  htmlContent = lockH1ToKeyword(htmlContent, keyword);
+  htmlContent = lockH1ToKeyword(htmlContent, lockKw);
   htmlContent = enforceTaglineLength(htmlContent);
   htmlContent = stripForbiddenWords(htmlContent);
   htmlContent = truncateFAQAnswers(htmlContent);
@@ -904,7 +925,7 @@ async function runPipeline(payload) {
         fullContent = stripPlaceholders(fullContent, clientName);
         fullContent = stripLinksFromHeadings(fullContent);
         fullContent = fixMalformedH3(fullContent);
-        fullContent = lockH1ToKeyword(fullContent, keyword);
+        fullContent = lockH1ToKeyword(fullContent, lockKw);
         fullContent = enforceTaglineLength(fullContent);
         fullContent = stripForbiddenWords(fullContent);
         fullContent = deduplicateLinks(fullContent);
@@ -945,7 +966,7 @@ async function runPipeline(payload) {
       fullContent = stripPlaceholders(fullContent, clientName);
       fullContent = stripLinksFromHeadings(fullContent);
       fullContent = fixMalformedH3(fullContent);
-      fullContent = lockH1ToKeyword(fullContent, keyword);
+      fullContent = lockH1ToKeyword(fullContent, lockKw);
       fullContent = enforceTaglineLength(fullContent);
       fullContent = stripForbiddenWords(fullContent);
       fullContent = deduplicateLinks(fullContent);
@@ -984,7 +1005,7 @@ async function runPipeline(payload) {
   cleanedContent = stripPlaceholders(cleanedContent, clientName);
   cleanedContent = stripLinksFromHeadings(cleanedContent);
   cleanedContent = fixMalformedH3(cleanedContent);
-  cleanedContent = lockH1ToKeyword(cleanedContent, keyword);
+  cleanedContent = lockH1ToKeyword(cleanedContent, lockKw);
   cleanedContent = enforceTaglineLength(cleanedContent);
   cleanedContent = stripForbiddenWords(cleanedContent);
   cleanedContent = deduplicateLinks(cleanedContent);
@@ -1137,7 +1158,12 @@ async function runPipeline(payload) {
   };
 
   // ─── 9a. Quality gate — block upsert if article is broken ─────────────────
-  const qc = qualityGate(cleanedContent, sections, template, scores.wordCount, formatResult.warnings);
+  // Edit-mode optimizations are sized by the page being edited, not the house
+  // template — gate against the original's length so short pages can pass.
+  const editWordTarget = payload.optimization && payload.optimization.editMode
+    ? payload.optimization.originalWords || null
+    : null;
+  const qc = qualityGate(cleanedContent, sections, template, scores.wordCount, formatResult.warnings, editWordTarget);
   if (!qc.pass) {
     console.error(`[Pipeline] ✗ QUALITY GATE FAILED for articleId=${articleId}:`);
     qc.issues.forEach(i => console.error(`  - ${i}`));
