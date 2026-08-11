@@ -2,7 +2,7 @@
 
 const {
   parseChangeReport, htmlToText, extractRecommendations,
-  htmlToBlockText, extractPageSections, buildEditSections,
+  htmlToBlockText, extractPageSections, buildEditSections, minimumWordCount,
 } = require('./lib/optimize');
 
 let passed = 0;
@@ -188,6 +188,28 @@ test('extractPageSections strips head, hero buttons, and badge/location widget s
   const parsed = extractPageSections(html);
   equal(parsed.intro.text, 'A real intro sentence about the topic follows here.');
   equal(parsed.sections.map(s => s.heading), ['Real Section']);
+});
+
+test('extractPageSections keeps a substantive Categories of Criminal Offenses section', () => {
+  const html = '<h1>What Is Considered a Criminal Offense in Illinois?</h1><p>An introduction with enough context for the reader.</p>'
+    + '<h2>Categories of Criminal Offenses</h2><p>Illinois recognizes felony classes, misdemeanor classes, and sentencing ranges that affect the possible consequences in each case.</p>'
+    + '<h2>How Charges Begin</h2><p>A criminal case may begin after an investigation, an arrest, or the filing of a charging document by prosecutors.</p>';
+  const parsed = extractPageSections(html);
+  equal(parsed.sections.map(s => s.heading), ['Categories of Criminal Offenses', 'How Charges Begin']);
+});
+
+test('extractPageSections preserves existing internal links in section markdown', () => {
+  const html = '<h1>Criminal Defense</h1><p>An introduction with enough context for the reader.</p>'
+    + '<h2>Your Options</h2><p>Read our <a href="https://libertylaw.com/criminal-defense/">criminal defense practice page</a> or <a href="/contact/">contact us</a> to discuss your case.</p>'
+    + '<h2>What Happens Next</h2><p>The next steps depend on the charge, the available evidence, and the procedural posture of the case.</p>';
+  const parsed = extractPageSections(html);
+  equal(parsed.sections[0].text, 'Read our [criminal defense practice page](https://libertylaw.com/criminal-defense/) or [contact us](/contact/) to discuss your case.');
+});
+
+test('edit-mode word gate keeps pages that started at 1000+ words above 1000', () => {
+  equal(minimumWordCount(1120, true), 1000);
+  equal(minimumWordCount(1600, true), 1280);
+  equal(minimumWordCount(900, true), 720);
 });
 
 if (failed > 0) {

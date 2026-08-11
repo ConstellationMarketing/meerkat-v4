@@ -5,6 +5,7 @@ const path = require('path');
 const Anthropic = require('@anthropic-ai/sdk');
 const { compileArticle } = require('./lib/article-compiler');
 const { insertLinks } = require('./lib/insert-links');
+const { minimumWordCount } = require('./lib/optimize');
 const { applyCompliance } = require('./lib/apply-compliance');
 const { scoreArticle } = require('./lib/scoring');
 const { upsertArticle } = require('./lib/supabase');
@@ -595,7 +596,7 @@ const TEMPLATE_WORD_TARGETS = {
 };
 
 // Pre-upsert quality gate — returns { pass, issues[] }
-function qualityGate(content, sections, template, wordCount, formatWarnings = [], wordTarget = null) {
+function qualityGate(content, sections, template, wordCount, formatWarnings = [], wordTarget = null, editMode = false) {
   const issues = [];
 
   // 1. Check for failed sections
@@ -617,9 +618,9 @@ function qualityGate(content, sections, template, wordCount, formatWarnings = []
 
   // 3. Article-level word count gate
   const target = wordTarget || TEMPLATE_WORD_TARGETS[template] || TEMPLATE_WORD_TARGETS['practice'];
-  const minWords = Math.round(target * 0.5);
+  const minWords = minimumWordCount(target, editMode);
   if (wordCount < minWords) {
-    issues.push(`Word count ${wordCount} below minimum ${minWords} (50% of ${target} target)`);
+    issues.push(`Word count ${wordCount} below minimum ${minWords} (${editMode ? 'edit-preservation' : '50%'} gate for ${target} target)`);
     return { pass: false, issues, reason: 'below-word-count' };
   }
 
@@ -886,7 +887,7 @@ async function runPipeline(payload) {
   let { htmlContent: linkedHTML } = insertLinks(htmlContent, allLinks);
   linkedHTML = deduplicateLinks(linkedHTML);
   linkedHTML = stripDirectoryLinks(linkedHTML);
-  linkedHTML = enforceAnchorTextLength(linkedHTML);
+  if (!isEditMode) linkedHTML = enforceAnchorTextLength(linkedHTML);
   linkedHTML = deduplicatePhrases(linkedHTML);
   linkedHTML = stripPhoneNumbers(linkedHTML);
   linkedHTML = fixCTALinks(linkedHTML, website);
@@ -940,7 +941,7 @@ async function runPipeline(payload) {
         fullContent = truncateFAQAnswers(fullContent);
         fullContent = splitLongParagraphs(fullContent);
         fullContent = stripDirectoryLinks(fullContent);
-        fullContent = enforceAnchorTextLength(fullContent);
+        if (!isEditMode) fullContent = enforceAnchorTextLength(fullContent);
         fullContent = deduplicatePhrases(fullContent);
         fullContent = stripPhoneNumbers(fullContent);
         fullContent = fixCTALinks(fullContent, website);
@@ -1027,7 +1028,7 @@ async function runPipeline(payload) {
   cleanedContent = truncateFAQAnswers(cleanedContent);
   cleanedContent = splitLongParagraphs(cleanedContent);
   cleanedContent = stripDirectoryLinks(cleanedContent);
-  cleanedContent = enforceAnchorTextLength(cleanedContent);
+  if (!isEditMode) cleanedContent = enforceAnchorTextLength(cleanedContent);
   cleanedContent = deduplicatePhrases(cleanedContent);
   cleanedContent = stripPhoneNumbers(cleanedContent);
   cleanedContent = fixCTALinks(cleanedContent, website);
@@ -1178,7 +1179,7 @@ async function runPipeline(payload) {
   const editWordTarget = payload.optimization && payload.optimization.editMode
     ? payload.optimization.originalWords || null
     : null;
-  const qc = qualityGate(cleanedContent, sections, template, scores.wordCount, formatResult.warnings, editWordTarget);
+  const qc = qualityGate(cleanedContent, sections, template, scores.wordCount, formatResult.warnings, editWordTarget, isEditMode);
   if (!qc.pass) {
     console.error(`[Pipeline] ✗ QUALITY GATE FAILED for articleId=${articleId}:`);
     qc.issues.forEach(i => console.error(`  - ${i}`));
