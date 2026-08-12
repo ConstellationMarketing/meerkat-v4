@@ -31,6 +31,7 @@ Background Information: {{clientInfo}}
 - Clean markdown only — no HTML tags, no horizontal rules, no code fences, and no commentary about what you changed.
 - Section 1 starts with the # H1; every other section starts with its ## heading.
 - Preserve every existing markdown link from CURRENT CONTENT exactly, including its visible anchor text and URL. Do not fabricate any new link or URL; a separate pass inserts additional links.
+- A link that sits alone on its own line is a button on the live page. Keep it, on its own line, exactly as written, even though it reads like promotional copy.
 - Every bold marker (**) must have a matching closing marker on the same line.
 
 USER: ## SECTION TO OPTIMIZE

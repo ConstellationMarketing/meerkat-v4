@@ -5,7 +5,7 @@ const path = require('path');
 const {
   parseChangeReport, htmlToText, extractRecommendations,
   htmlToBlockText, extractPageSections, buildEditSections, minimumWordCount,
-  buildPreservationRequirements, preservationIssues, failureRecord,
+  buildPreservationRequirements, preservationIssues, failureRecord, missingSectionSource,
 } = require('./lib/optimize');
 const { mergeOptimizeItems } = require('./routes/os-api');
 process.env.ANTHROPIC_API_KEY ||= 'test-key';
@@ -463,6 +463,26 @@ test('review result is kept when it preserves protected content', () => {
 
 test('review result is kept unchanged when there is nothing to preserve', () => {
   equal(keepBestPreserved('<p>a</p>', '<p>b</p>', null, 'structural review'), '<p>b</p>');
+});
+
+// Batch opt-2026-08-12-a03803a9: every deterministic loss was fixed, and the
+// only remaining failure was the section editor silently dropping the
+// standalone "[Contact Us](/contact/)" line at the end of its section.
+test('missingSectionSource names the markdown the edit dropped', () => {
+  const original = '## Additional Considerations\nCall [Liberty Law](/) today.\n\n[Contact Us](/contact/)';
+  const output = '## Additional Considerations\nCall [Liberty Law](/) today.';
+  equal(missingSectionSource(original, output), ['link [Contact Us](/contact/)']);
+});
+
+test('missingSectionSource tolerates re-typeset punctuation and reordering', () => {
+  const original = "## What to Do if You’re Arrested\nSee [contact us](/contact/) and [Liberty Law](/).";
+  const output = "## What to Do if You're Arrested\nSee [Liberty Law](/) and [contact us](/contact/).";
+  equal(missingSectionSource(original, output), []);
+});
+
+test('missingSectionSource flags a heading the edit renamed', () => {
+  equal(missingSectionSource('## Your Responsibilities After the Arrest\nBody.', '## After the Arrest\nBody.'),
+    ['heading "Your Responsibilities After the Arrest"']);
 });
 
 test('htmlToText survives out-of-range numeric entities', () => {

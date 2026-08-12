@@ -5,7 +5,7 @@ const path = require('path');
 const Anthropic = require('@anthropic-ai/sdk');
 const { compileArticle } = require('./lib/article-compiler');
 const { insertLinks } = require('./lib/insert-links');
-const { minimumWordCount, preservationIssues } = require('./lib/optimize');
+const { minimumWordCount, preservationIssues, missingSectionSource } = require('./lib/optimize');
 const { applyCompliance } = require('./lib/apply-compliance');
 const { replaceOutsideTags } = require('./lib/html-text');
 const { scoreArticle } = require('./lib/scoring');
@@ -817,6 +817,7 @@ async function generateSection(payload, section) {
   let lastOutput = null;
   let lastScore = null;
   let lastWordCount = null;
+  let lastMissing = [];
   const MAX_RETRIES = 2;
   const targetWords = section.wordCount ? parseInt(section.wordCount, 10) : null;
   // Section passes QC if word count is at least 80% of target (allows minor variance)
@@ -840,6 +841,10 @@ async function generateSection(payload, section) {
       if (minWords && lastWordCount < minWords) {
         issues.push(`Word count was ${lastWordCount} — target is ${targetWords}. Expand with more substantive detail. Do not pad with filler.`);
       }
+      if (lastMissing.length) {
+        issues.push(`Your previous draft dropped content that must survive verbatim: ${lastMissing.join(', ')}.`
+          + ' Reproduce each one exactly as it appears in CURRENT CONTENT, including any link that sits alone on its own line.');
+      }
       userMsg += `\n\nPrevious output needs revision: ${issues.join(' ')}`;
     }
 
@@ -849,15 +854,20 @@ async function generateSection(payload, section) {
     lastScore = rawScore;
     lastWordCount = outputWords;
 
+    // An edit that dropped one of the live page's own headings or links fails
+    // the batch at the quality gate. Catching it here costs one more call.
+    lastMissing = editMode ? missingSectionSource(section.originalText, output) : [];
+
     const fleschOk = rawScore >= fleschMin;
     const wordCountOk = !minWords || outputWords >= minWords;
 
-    if (fleschOk && wordCountOk) break;
+    if (fleschOk && wordCountOk && !lastMissing.length) break;
 
     if (attempt === MAX_RETRIES) {
       const failures = [];
       if (!fleschOk) failures.push(`flesch=${rawScore}`);
       if (!wordCountOk) failures.push(`words=${outputWords}/${targetWords}`);
+      if (lastMissing.length) failures.push(`dropped ${lastMissing.join('; ')}`);
       console.warn(`Section ${section.sectionNumber} QC issues after ${MAX_RETRIES + 1} attempts (${failures.join(', ')}) — using as-is`);
     }
   }
