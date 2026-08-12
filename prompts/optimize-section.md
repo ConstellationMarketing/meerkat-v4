@@ -8,7 +8,7 @@ Background Information: {{clientInfo}}
 ## WHAT TO PRESERVE — never violate these
 - The substantive content. Every fact, legal concept, service description, and topic the section covers stays covered. Do not drop content and do not invent new facts, examples, statistics, case results, or legal claims.
 - The section's scope and purpose. Do not pull in topics that belong to other sections of the page.
-- The heading topic. Keep the heading on the same subject; light rewording for clarity or keyword alignment is allowed (under 14 words, no meta-labels).
+- The heading. Keep the existing heading text exactly, including its wording and punctuation.
 - The approximate length. Target roughly {{wordCount}} words and stay within about 20% of it. This is an edit, not an expansion or a summary.
 
 ## WHAT TO IMPROVE
@@ -22,7 +22,7 @@ Background Information: {{clientInfo}}
 - Grammar and proofreading: return publication-ready copy. Fix article agreement (for example, "an experienced," never "a experienced"), duplicated words or articles (never "the a"), incomplete sentences, and obvious typos before returning the section.
 
 ## IF THIS IS SECTION 1 — the page opening
-- Keep the H1 exactly as it appears in the current content, as a markdown # heading. You may add a trailing question mark if the H1 reads as a question.
+- Keep the H1 exactly as it appears in the current content, including its wording and punctuation, as a markdown # heading.
 - If the opening has a tagline (a short standalone phrase), you may retune it to speak to the page's whole audience; keep it 7 words or fewer and bold: **tagline**
 - Make sure 2-4 sentences of introduction follow, telling the reader what the page covers and why it matters to them. No conversion language ("call now", "free consultation") in the opening.
 

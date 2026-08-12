@@ -9,6 +9,16 @@ const { queueTranslation } = require('../lib/translate-queue');
 
 const router = express.Router();
 
+function mergeOptimizeItems(items, enriched, userId) {
+  return items.map((item, index) => ({
+    ...enriched[index],
+    os_batch_item_id: item.os_batch_item_id || null,
+    url: item.url,
+    guidance: item.guidance || '',
+    userId: userId || null,
+  }));
+}
+
 // Shared-secret gate. Fail closed: an instance without the secret refuses.
 router.use((req, res, next) => {
   const secret = process.env.OS_RUN_SECRET;
@@ -34,7 +44,7 @@ router.post('/optimize/start', async (req, res) => {
     const enriched = await enrichArticles(items.map((i) => ({
       keyword: i.keyword, clientName: i.clientName, template: i.template || 'Practice Page',
     })));
-    const merged = items.map((i, n) => ({ ...enriched[n], url: i.url, guidance: i.guidance || '', userId: userId || null }));
+    const merged = mergeOptimizeItems(items, enriched, userId);
     const batchId = `opt-${new Date().toISOString().slice(0, 10)}-${crypto.randomUUID().slice(0, 8)}`;
     await createOptimizeJob(batchId, merged.length, userId || null);
     res.status(202).json({ batchId, total: merged.length });
@@ -52,3 +62,4 @@ router.post('/translate/queue', (req, res) => {
 });
 
 module.exports = router;
+module.exports.mergeOptimizeItems = mergeOptimizeItems;
