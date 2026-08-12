@@ -1,9 +1,14 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const {
   parseChangeReport, htmlToText, extractRecommendations,
   htmlToBlockText, extractPageSections, buildEditSections, minimumWordCount,
+  buildPreservationRequirements, preservationIssues,
 } = require('./lib/optimize');
+process.env.ANTHROPIC_API_KEY ||= 'test-key';
+const { preservationReviewPreamble, qualityGate } = require('./pipeline');
 
 let passed = 0;
 let failed = 0;
@@ -206,10 +211,86 @@ test('extractPageSections preserves existing internal links in section markdown'
   equal(parsed.sections[0].text, 'Read our [criminal defense practice page](https://libertylaw.com/criminal-defense/) or [contact us](/contact/) to discuss your case.');
 });
 
-test('edit-mode word gate keeps pages that started at 1000+ words above 1000', () => {
+test('edit-mode word gate never allows fewer than 1000 words', () => {
   equal(minimumWordCount(1120, true), 1000);
   equal(minimumWordCount(1600, true), 1280);
-  equal(minimumWordCount(900, true), 720);
+  equal(minimumWordCount(900, true), 1000);
+});
+
+test('short edit pages receive enough section target for a 1000-word final draft', () => {
+  const parsed = {
+    h1: 'What Is Considered a Criminal Offense in Illinois?',
+    intro: { text: 'Short opening.', words: 76 },
+    sections: [
+      { heading: 'Categories of Criminal Offenses', text: 'x', words: 227 },
+      { heading: 'Legal Consequences', text: 'y', words: 205 },
+      { heading: 'How an Attorney Can Help', text: 'z', words: 107 },
+    ],
+    hasFaq: false,
+    hasCta: true,
+    totalWords: 615,
+  };
+  const jobs = buildEditSections(parsed, []);
+  equal(jobs.reduce((total, job) => total + job.wordCount, 0), 1250);
+  equal(jobs.slice(0, 4).map(job => job.name), [
+    'Page opening',
+    'Categories of Criminal Offenses',
+    'Legal Consequences',
+    'How an Attorney Can Help',
+  ]);
+});
+
+test('preservation requirements reject missing original headings and links', () => {
+  const source = '<h1>Criminal Offense</h1><p>Intro.</p>'
+    + '<h2>Categories of Criminal Offenses</h2><p>Read about a <a href="/misdemeanor/">misdemeanor</a> and how Illinois classifies criminal charges by severity and possible consequences.</p>'
+    + '<h2>Legal Consequences</h2><p>The consequences may depend on the charge, prior history, available evidence, and the final resolution.</p>';
+  const requirements = buildPreservationRequirements(source, extractPageSections(source));
+  equal(preservationIssues(
+    '<h1>Criminal Offense</h1><h2>Legal Consequences</h2><p>Read about a misdemeanor.</p>',
+    requirements,
+  ), [
+    'Missing original heading: Categories of Criminal Offenses',
+    'Missing original link: misdemeanor (/misdemeanor/)',
+  ]);
+  equal(preservationIssues(source, requirements), []);
+});
+
+test('quality gate blocks edit output that drops preserved content', () => {
+  const result = qualityGate(
+    '<h1>Criminal Offense</h1><h2>Legal Consequences</h2><p>body</p>',
+    [{ sectionNumber: 1 }],
+    'Practice Page',
+    1100,
+    [],
+    900,
+    true,
+    {
+      headings: ['Criminal Offense', 'Categories of Criminal Offenses', 'Legal Consequences'],
+      links: [{ anchor: 'misdemeanor', href: '/misdemeanor/' }],
+    },
+  );
+  equal(result.reason, 'missing-original-content');
+  equal(result.issues, [
+    'Missing original heading: Categories of Criminal Offenses',
+    'Missing original link: misdemeanor (/misdemeanor/)',
+  ]);
+});
+
+test('optimization prompts preserve exact headings and links through proofreading', () => {
+  const sectionPrompt = fs.readFileSync(path.join(__dirname, 'prompts', 'optimize-section.md'), 'utf8');
+  const reviewPrompt = fs.readFileSync(path.join(__dirname, 'prompts', 'article-review.md'), 'utf8');
+  equal(sectionPrompt.includes('Keep the existing heading text exactly'), true);
+  equal(reviewPrompt.includes('preserved original link'), true);
+  equal(reviewPrompt.includes('article agreement'), true);
+});
+
+test('review preamble lists the exact original content that must survive', () => {
+  const preamble = preservationReviewPreamble({
+    headings: ['Criminal Offense', 'Categories of Criminal Offenses'],
+    links: [{ anchor: 'misdemeanor', href: '/misdemeanor/' }],
+  });
+  equal(preamble.includes('Categories of Criminal Offenses'), true);
+  equal(preamble.includes('misdemeanor -> /misdemeanor/'), true);
 });
 
 if (failed > 0) {

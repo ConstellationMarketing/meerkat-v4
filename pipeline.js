@@ -5,7 +5,7 @@ const path = require('path');
 const Anthropic = require('@anthropic-ai/sdk');
 const { compileArticle } = require('./lib/article-compiler');
 const { insertLinks } = require('./lib/insert-links');
-const { minimumWordCount } = require('./lib/optimize');
+const { minimumWordCount, preservationIssues } = require('./lib/optimize');
 const { applyCompliance } = require('./lib/apply-compliance');
 const { scoreArticle } = require('./lib/scoring');
 const { upsertArticle } = require('./lib/supabase');
@@ -596,7 +596,7 @@ const TEMPLATE_WORD_TARGETS = {
 };
 
 // Pre-upsert quality gate — returns { pass, issues[] }
-function qualityGate(content, sections, template, wordCount, formatWarnings = [], wordTarget = null, editMode = false) {
+function qualityGate(content, sections, template, wordCount, formatWarnings = [], wordTarget = null, editMode = false, preservation = null) {
   const issues = [];
 
   // 1. Check for failed sections
@@ -624,13 +624,19 @@ function qualityGate(content, sections, template, wordCount, formatWarnings = []
     return { pass: false, issues, reason: 'below-word-count' };
   }
 
-  // 4. Must have at least one H1
+  // 4. Edit-mode output must keep every substantive live-page heading and link.
+  if (editMode && preservation) {
+    const missing = preservationIssues(content, preservation);
+    if (missing.length) return { pass: false, issues: missing, reason: 'missing-original-content' };
+  }
+
+  // 5. Must have at least one H1
   if (!/<h1/i.test(content)) {
     issues.push('Missing H1 heading');
     return { pass: false, issues, reason: 'missing-h1' };
   }
 
-  // 5. Hard-block scaffold/brief text leaks. Editors have flagged these as
+  // 6. Hard-block scaffold/brief text leaks. Editors have flagged these as
   // visibly templated copy multiple times; never publish them.
   const scaffoldLeaks = (formatWarnings || []).filter(w => w.startsWith('SCAFFOLD:'));
   if (scaffoldLeaks.length > 0) {
@@ -643,6 +649,13 @@ function qualityGate(content, sections, template, wordCount, formatWarnings = []
 
 function recommendationLines(recs) {
   return (recs || []).map(r => `- [${(r.checks || []).join(', ')}] ${r.fix}`).join('\n');
+}
+
+function preservationReviewPreamble(preservation) {
+  if (!preservation) return '';
+  const headings = (preservation.headings || []).map(heading => `- ${heading}`).join('\n');
+  const links = (preservation.links || []).map(link => `- ${link.anchor} -> ${link.href}`).join('\n');
+  return `ORIGINAL CONTENT THAT MUST SURVIVE EXACTLY:\nHeadings:\n${headings || '- none'}\nLinks:\n${links || '- none'}\n\n`;
 }
 
 function optimizationPreamble(opt, { includeBefore = true } = {}) {
@@ -916,7 +929,8 @@ async function runPipeline(payload) {
     // enforce template section rules against sections the page already has
     // (the attlaw dry run deleted the firm's own "How We Can Help" section).
     const reviewUser = isEditMode
-      ? 'THIS ARTICLE IS AN OPTIMIZATION OF AN EXISTING LIVE PAGE. Its sections mirror the live page and must ALL survive review: do NOT remove, relocate, or rewrite-away any section, even where a template rule says the section type does not belong on this page type, and do NOT shorten an existing CTA section for being promotional. Still fix broken paragraphs, duplicated content, bad links, and formatting.\n\n'
+      ? 'THIS ARTICLE IS AN OPTIMIZATION OF AN EXISTING LIVE PAGE. Its sections mirror the live page and must ALL survive review: do NOT remove, relocate, or rewrite-away any section, even where a template rule says the section type does not belong on this page type, and do NOT shorten an existing CTA section for being promotional. Still fix broken paragraphs, duplicated content, bad links, grammar, and formatting.\n\n'
+        + preservationReviewPreamble(payload.optimization?.preservation)
         + reviewPrompt.user
       : reviewPrompt.user;
     const reviewRaw = await callClaude(reviewPrompt.system, reviewUser, 'claude-sonnet-4-6');
@@ -1179,7 +1193,16 @@ async function runPipeline(payload) {
   const editWordTarget = payload.optimization && payload.optimization.editMode
     ? payload.optimization.originalWords || null
     : null;
-  const qc = qualityGate(cleanedContent, sections, template, scores.wordCount, formatResult.warnings, editWordTarget, isEditMode);
+  const qc = qualityGate(
+    cleanedContent,
+    sections,
+    template,
+    scores.wordCount,
+    formatResult.warnings,
+    editWordTarget,
+    isEditMode,
+    payload.optimization?.preservation,
+  );
   if (!qc.pass) {
     console.error(`[Pipeline] ✗ QUALITY GATE FAILED for articleId=${articleId}:`);
     qc.issues.forEach(i => console.error(`  - ${i}`));
@@ -1261,4 +1284,4 @@ async function runPipeline(payload) {
   };
 }
 
-module.exports = { runPipeline, enforceTaglineLength };
+module.exports = { runPipeline, enforceTaglineLength, preservationReviewPreamble, qualityGate };
