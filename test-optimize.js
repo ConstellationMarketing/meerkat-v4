@@ -491,16 +491,48 @@ test('phrase dedup keeps links while removing the repeated word', () => {
 
 test('FAQ truncation keeps links inside the sentences it retains', () => {
   const out = postProcess(
-    '<h1>Arrested in Illinois</h1>\n<h2>FAQ</h2>\n<h3>Who should I call?</h3>\n'
+    '<h1>Arrested in Illinois</h1><h2>FAQ</h2><h3>Who should I call?</h3>'
     + '<p>Call <a href="/contact/">contact us</a> right away. A lawyer can review the arrest. '
     + 'Bail terms vary by county. Court dates are set later.</p>',
-    { clientName: 'Liberty Law', website: 'https://libertylawfirm.net', isEditMode: true }
+    { clientName: 'Liberty Law', website: 'https://libertylawfirm.net', isEditMode: false }
   );
   equal(out.includes('Court dates are set later'), false);
-  equal(preservationIssues(out, {
-    headings: [],
-    links: [{ anchor: 'contact us', href: '/contact/' }],
-  }), []);
+  equal(out.includes('<a href="/contact/">contact us</a>'), true);
+});
+
+test('FAQ truncation is skipped in edit mode so the live page keeps its answers', () => {
+  const answer = '<p>Call <a href="/contact/">contact us</a> right away. A lawyer can review the arrest. '
+    + 'Bail terms vary by county. Court dates are set later.</p>';
+  const out = postProcess(
+    '<h1>Arrested in Illinois</h1><h2>FAQ</h2><h3>Who should I call?</h3>' + answer,
+    { clientName: 'Liberty Law', website: 'https://libertylawfirm.net', isEditMode: true }
+  );
+  equal(out.includes('Court dates are set later'), true);
+});
+
+test('FAQ truncation counts abbreviations as one sentence when markup is present', () => {
+  const out = postProcess(
+    '<h1>Arrested in Illinois</h1><h2>FAQ</h2><h3>Who reviews the file?</h3>'
+    + '<p>Dr. Smith reviews the intake with <a href="/contact/">our team</a>. '
+    + 'A lawyer then reads the police report. '
+    + 'Bail terms vary by county. Court dates are set later.</p>',
+    { clientName: 'Liberty Law', website: 'https://libertylawfirm.net', isEditMode: false }
+  );
+  equal(out.includes('<a href="/contact/">our team</a>'), true);
+  equal(out.includes('A lawyer then reads the police report.'), true);
+  equal(out.includes('Bail terms vary by county'), false);
+});
+
+test('FAQ truncation falls back to text when abbreviations break the HTML split', () => {
+  const out = postProcess(
+    '<h1>Arrested in Illinois</h1><h2>FAQ</h2><h3>Who reviews the file?</h3>'
+    + '<p>Dr. Smith reviews the intake with you. A lawyer then reads the police report. '
+    + 'Bail terms vary by county. Court dates are set later.</p>',
+    { clientName: 'Liberty Law', website: 'https://libertylawfirm.net', isEditMode: false }
+  );
+  equal(out.includes('Dr. Smith reviews the intake with you.'), true);
+  equal(out.includes('A lawyer then reads the police report.'), true);
+  equal(out.includes('Court dates are set later'), false);
 });
 
 // The generators rewrite ’ as ', – as -, and … as ... . That is typography, not

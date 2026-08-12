@@ -412,8 +412,11 @@ function fixCTALinks(html, website) {
   return html;
 }
 
-// Post-processing: truncate FAQ answers to max 2 sentences
-function truncateFAQAnswers(html) {
+// Post-processing: truncate FAQ answers to max 2 sentences. Edit-mode
+// optimizations keep the live page's own FAQ at its own length — cutting its
+// answers would drop original content the preservation gate requires.
+function truncateFAQAnswers(html, editMode = false) {
+  if (editMode) return html;
   // Find the FAQ section — H2 containing "FAQ" or "Frequently Asked"
   const faqHeaderIdx = html.search(/<h2>[^<]*(FAQ|Frequently Asked)[^<]*<\/h2>/i);
   if (faqHeaderIdx === -1) return html;
@@ -433,9 +436,16 @@ function truncateFAQAnswers(html) {
       // Answers carrying inline markup are truncated on the HTML itself, so the
       // sentences we keep keep their links and bold instead of going flat.
       if (/<[^/][^>]*>/.test(answerContent)) {
-        const htmlSentences = answerContent.split(/(?<=[.!?])\s+(?=[A-Z<])/);
-        if (htmlSentences.length <= 2) return match;
-        return `${h3}${pOpen}${htmlSentences.slice(0, 2).join(' ').trim()}${pClose}`;
+        // The naive split also fires on abbreviations ("Dr. Smith"), so grow the
+        // kept HTML until its plain text holds two real sentences.
+        const pieces = answerContent.split(/(?<=[.!?])\s+(?=[A-Z<])/);
+        let kept = '';
+        for (const piece of pieces) {
+          kept = kept ? `${kept} ${piece}` : piece;
+          if ((splitSentences(kept.replace(/<[^>]+>/g, '')) || []).length >= 2) break;
+        }
+        if (kept.trim() === answerContent.trim()) return match;
+        return `${h3}${pOpen}${kept.trim()}${pClose}`;
       }
 
       // Keep first 2 sentences
@@ -614,7 +624,7 @@ function postProcess(html, { clientName, lockKw, website, isEditMode } = {}) {
   out = enforceTaglineLength(out);
   out = stripForbiddenWords(out);
   out = applyDestructiveLinkTransforms(out, website, isEditMode);
-  out = truncateFAQAnswers(out);
+  out = truncateFAQAnswers(out, isEditMode);
   out = splitLongParagraphs(out);
   if (!isEditMode) out = enforceAnchorTextLength(out);
   out = deduplicatePhrases(out);
@@ -911,7 +921,7 @@ async function runPipeline(payload) {
   htmlContent = lockH1ToKeyword(htmlContent, lockKw);
   htmlContent = enforceTaglineLength(htmlContent);
   htmlContent = stripForbiddenWords(htmlContent);
-  htmlContent = truncateFAQAnswers(htmlContent);
+  htmlContent = truncateFAQAnswers(htmlContent, isEditMode);
   htmlContent = splitLongParagraphs(htmlContent);
   htmlContent = stripPhoneNumbers(htmlContent, isEditMode);
   htmlContent = capH3Density(htmlContent);
