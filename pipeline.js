@@ -7,6 +7,7 @@ const { compileArticle } = require('./lib/article-compiler');
 const { insertLinks } = require('./lib/insert-links');
 const { minimumWordCount, preservationIssues } = require('./lib/optimize');
 const { applyCompliance } = require('./lib/apply-compliance');
+const { replaceOutsideTags } = require('./lib/html-text');
 const { scoreArticle } = require('./lib/scoring');
 const { upsertArticle } = require('./lib/supabase');
 const { publishArticle } = require('./lib/github-publish');
@@ -412,6 +413,23 @@ function fixCTALinks(html, website) {
   return html;
 }
 
+const VOID_TAGS = /^(br|img|hr|input|meta|link|source|wbr)$/i;
+
+// Every element opened in this fragment is also closed in it.
+function tagsBalanced(html) {
+  const depth = new Map();
+  for (const [, name, selfClosing] of html.matchAll(/<([a-zA-Z][\w-]*)\b[^>]*?(\/?)>/g)) {
+    if (selfClosing || VOID_TAGS.test(name)) continue;
+    const key = name.toLowerCase();
+    depth.set(key, (depth.get(key) || 0) + 1);
+  }
+  for (const [, name] of html.matchAll(/<\/([a-zA-Z][\w-]*)\s*>/g)) {
+    const key = name.toLowerCase();
+    depth.set(key, (depth.get(key) || 0) - 1);
+  }
+  return [...depth.values()].every(n => n === 0);
+}
+
 // Post-processing: truncate FAQ answers to max 2 sentences. Edit-mode
 // optimizations keep the live page's own FAQ at its own length — cutting its
 // answers would drop original content the preservation gate requires.
@@ -442,7 +460,9 @@ function truncateFAQAnswers(html, editMode = false) {
         let kept = '';
         for (const piece of pieces) {
           kept = kept ? `${kept} ${piece}` : piece;
-          if ((splitSentences(kept.replace(/<[^>]+>/g, '')) || []).length >= 2) break;
+          // A sentence boundary can fall inside a link. Keep going past the
+          // two-sentence mark rather than cutting an element open.
+          if ((splitSentences(kept.replace(/<[^>]+>/g, '')) || []).length >= 2 && tagsBalanced(kept)) break;
         }
         if (kept.trim() === answerContent.trim()) return match;
         return `${h3}${pOpen}${kept.trim()}${pClose}`;
@@ -540,14 +560,11 @@ function deduplicatePhrases(html) {
     // Handles "from day one from day one", "clear guidance, clear guidance", etc.
     // Rewrite each text run between tags on its own — rebuilding the paragraph
     // from tag-stripped text deleted every link and bold marker inside it.
-    const fixed = content
-      .split(/(<[^>]*>)/)
-      .map(part => (part.startsWith('<') ? part : part
-        // Match phrase repeated with optional comma/space between
-        .replace(/\b((?:\w+\s+){1,5}\w+)[\s,]+\1\b/gi, '$1')
-        // Match single repeated words: "help help", "the the"
-        .replace(/\b(\w+)\s+\1\b/gi, '$1')))
-      .join('');
+    const fixed = replaceOutsideTags(content, text => text
+      // Match phrase repeated with optional comma/space between
+      .replace(/\b((?:\w+\s+){1,5}\w+)[\s,]+\1\b/gi, '$1')
+      // Match single repeated words: "help help", "the the"
+      .replace(/\b(\w+)\s+\1\b/gi, '$1'));
 
     if (fixed !== content) return `<p>${fixed}</p>`;
     return match;

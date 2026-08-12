@@ -465,6 +465,29 @@ test('review result is kept unchanged when there is nothing to preserve', () => 
   equal(keepBestPreserved('<p>a</p>', '<p>b</p>', null, 'structural review'), '<p>b</p>');
 });
 
+test('htmlToText survives out-of-range numeric entities', () => {
+  equal(htmlToText('<p>Fee&#1114112;schedule &#x110000; here</p>').includes('schedule'), true);
+});
+
+test('compliance replacements survive a > inside an attribute value', () => {
+  const { htmlContent } = applyCompliance(
+    '<p><a title="x > y" href="/guarantee/">guarantee</a></p>',
+    { violations: [{ term: 'guarantee', replacement: 'work toward' }] }
+  );
+  equal(htmlContent.includes('href="/guarantee/"'), true);
+  equal(htmlContent.includes('title="x > y"'), true);
+  equal(htmlContent.includes('>work toward</a>'), true);
+});
+
+test('FAQ truncation never leaves an inline element unclosed', () => {
+  const out = postProcess(
+    '<h1>T</h1><h2>FAQ</h2><h3>Q?</h3>'
+    + '<p><a href="/x">First one here. Second one here. Third one here.</a> Fourth one here.</p>',
+    { clientName: 'Firm', website: 'https://x.com', isEditMode: false }
+  );
+  equal((out.match(/<a /g) || []).length, (out.match(/<\/a>/g) || []).length);
+});
+
 test('compliance replacements never rewrite HTML attributes', () => {
   const { htmlContent } = applyCompliance(
     '<p>We <a href="/guarantee/" title="guarantee">guarantee</a> results.</p>',
