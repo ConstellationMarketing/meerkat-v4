@@ -678,18 +678,28 @@ function qualityGate(content, sections, template, wordCount, formatWarnings = []
     return { pass: false, issues, reason: 'placeholder-content' };
   }
 
-  // 3. Article-level word count gate
+  // 3. Edit-mode output must keep every substantive live-page heading and link.
+  // Checked before length, because lost content is the diagnosis and a short
+  // draft is usually just its symptom.
+  if (editMode && preservation) {
+    const missing = preservationIssues(content, preservation);
+    if (missing.length) return { pass: false, issues: missing, reason: 'missing-original-content' };
+  }
+
+  // 4. Article-level word count gate
   const target = wordTarget || TEMPLATE_WORD_TARGETS[template] || TEMPLATE_WORD_TARGETS['practice'];
   const minWords = minimumWordCount(target, editMode);
   if (wordCount < minWords) {
     issues.push(`Word count ${wordCount} below minimum ${minWords} (${editMode ? 'edit-preservation' : '50%'} gate for ${target} target)`);
-    return { pass: false, issues, reason: 'below-word-count' };
-  }
-
-  // 4. Edit-mode output must keep every substantive live-page heading and link.
-  if (editMode && preservation) {
-    const missing = preservationIssues(content, preservation);
-    if (missing.length) return { pass: false, issues: missing, reason: 'missing-original-content' };
+    // An edit that kept the whole live page but landed under the target is a thin
+    // draft, not a lost one. Discarding it burns a full generation and leaves the
+    // editor with an empty failed batch and only a dice-roll requeue to recover.
+    // Save it with the shortfall on the record; a draft actually shorter than the
+    // page it replaces is a real regression and still fails.
+    const originalWords = editMode ? Number(wordTarget) || 0 : 0;
+    if (!(originalWords > 0 && wordCount >= originalWords)) {
+      return { pass: false, issues, reason: 'below-word-count' };
+    }
   }
 
   // 5. Must have at least one H1
