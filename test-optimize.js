@@ -11,7 +11,7 @@ const { mergeOptimizeItems } = require('./routes/os-api');
 process.env.ANTHROPIC_API_KEY ||= 'test-key';
 const {
   preservationReviewPreamble, qualityGate, shouldPublishExternally, applyDestructiveLinkTransforms,
-  buildReviewPrompts, stripPhoneNumbers, postProcess,
+  buildReviewPrompts, stripPhoneNumbers, postProcess, keepBestPreserved,
 } = require('./pipeline');
 const { compileArticle } = require('./lib/article-compiler');
 const { applyCompliance } = require('./lib/apply-compliance');
@@ -442,6 +442,27 @@ test('edit-mode post-processing keeps every original link in a CTA section', () 
       { anchor: 'Contact Us', href: '/contact/' },
     ],
   }), []);
+});
+
+// The structural reviewer is a whole-article LLM rewrite. When it returns an
+// article that lost protected content, the pre-review draft is the better one:
+// its only defect is unfixed formatting, which is not a batch-failing offense.
+test('review result is discarded when it loses protected content', () => {
+  const preservation = { headings: ['Contact Our Firm'], links: [{ anchor: 'contact us', href: '/contact/' }] };
+  const before = '<h2>Contact Our Firm</h2><p>Please <a href="/contact/">contact us</a> today.</p>';
+  const reviewed = '<h2>Contact Our Firm</h2><p>Please reach out today.</p>';
+  equal(keepBestPreserved(before, reviewed, preservation, 'structural review'), before);
+});
+
+test('review result is kept when it preserves protected content', () => {
+  const preservation = { headings: ['Contact Our Firm'], links: [{ anchor: 'contact us', href: '/contact/' }] };
+  const before = '<h2>Contact Our Firm</h2><p>Please  <a href="/contact/">contact us</a>  today.</p>';
+  const reviewed = '<h2>Contact Our Firm</h2><p>Please <a href="/contact/">contact us</a> today.</p>';
+  equal(keepBestPreserved(before, reviewed, preservation, 'structural review'), reviewed);
+});
+
+test('review result is kept unchanged when there is nothing to preserve', () => {
+  equal(keepBestPreserved('<p>a</p>', '<p>b</p>', null, 'structural review'), '<p>b</p>');
 });
 
 test('compliance replacements never rewrite HTML attributes', () => {

@@ -694,6 +694,17 @@ function trackPreservation(stage, html, preservation, seen = []) {
   return issues;
 }
 
+// A whole-article LLM rewrite that came back missing protected content is worth
+// less than the draft it replaced: the draft's only defect is the formatting
+// that pass would have fixed, while its replacement fails the batch outright.
+function keepBestPreserved(before, after, preservation, stage) {
+  if (!preservation) return after;
+  const lost = preservationIssues(after, preservation).length - preservationIssues(before, preservation).length;
+  if (lost <= 0) return after;
+  console.warn(`[Preserve] discarding ${stage} output — it dropped ${lost} protected item(s)`);
+  return before;
+}
+
 function recommendationLines(recs) {
   return (recs || []).map(r => `- [${(r.checks || []).join(', ')}] ${r.fix}`).join('\n');
 }
@@ -1002,10 +1013,10 @@ async function runPipeline(payload) {
         console.log(`  - [${issue.type}] ${issue.description}`);
       });
       if (reviewResult.fixed_article) {
-        fullContent = sanitizeReviewedHTML(reviewResult.fixed_article);
-        // Re-run post-processing after review fixes (review may reintroduce issues)
-        fullContent = postProcess(fullContent, { clientName, lockKw, website, isEditMode });
-        console.log('[Pipeline] Applied structural fixes from review');
+        const reviewed = postProcess(sanitizeReviewedHTML(reviewResult.fixed_article),
+          { clientName, lockKw, website, isEditMode });
+        fullContent = keepBestPreserved(fullContent, reviewed, preservation, 'structural review');
+        if (fullContent === reviewed) console.log('[Pipeline] Applied structural fixes from review');
       }
     } else {
       console.log('[Pipeline] Review passed — no structural issues found');
@@ -1304,5 +1315,5 @@ async function runPipeline(payload) {
 module.exports = {
   runPipeline, enforceTaglineLength, preservationReviewPreamble, qualityGate,
   shouldPublishExternally, applyDestructiveLinkTransforms, buildReviewPrompts, stripPhoneNumbers,
-  postProcess,
+  postProcess, keepBestPreserved,
 };
