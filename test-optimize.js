@@ -271,6 +271,22 @@ test('failure records retain immutable OS batch item identity', () => {
   });
 });
 
+test('preservation requirements exclude article metadata and sidebar chrome', () => {
+  const source = '<article>'
+    + '<section><a href="/category/criminal-law/">Criminal Law</a><h1>Arrested in Illinois</h1></section>'
+    + '<section><div><div class="prose"><p>Read the <a href="/rights/">rights guide</a>.</p><h2>What to Do</h2><p>Stay calm.</p></div>'
+    + '<a href="/contact/">Contact Us</a></div>'
+    + '<aside><h2>Recent Posts</h2><a href="/old-post/">Old Post</a></aside></section>'
+    + '</article>';
+  equal(buildPreservationRequirements(source), {
+    headings: ['Arrested in Illinois', 'What to Do'],
+    links: [
+      { anchor: 'rights guide', href: '/rights/' },
+      { anchor: 'Contact Us', href: '/contact/' },
+    ],
+  });
+});
+
 test('preservation requirements include links from short CTA sections', () => {
   const source = '<main><h1>Criminal Offense</h1><p>Intro.</p>'
     + '<h2>Legal Consequences</h2><p>The consequences may depend on the charge, prior history, available evidence, and final resolution.</p>'
