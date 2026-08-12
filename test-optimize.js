@@ -13,7 +13,7 @@ const {
   preservationReviewPreamble, qualityGate, shouldPublishExternally, applyDestructiveLinkTransforms,
   buildReviewPrompts, stripPhoneNumbers, postProcess, keepBestPreserved,
 } = require('./pipeline');
-const { compileArticle } = require('./lib/article-compiler');
+const { compileArticle, convertToHTML } = require('./lib/article-compiler');
 const { applyCompliance } = require('./lib/apply-compliance');
 
 let passed = 0;
@@ -463,6 +463,21 @@ test('review result is kept when it preserves protected content', () => {
 
 test('review result is kept unchanged when there is nothing to preserve', () => {
   equal(keepBestPreserved('<p>a</p>', '<p>b</p>', null, 'structural review'), '<p>b</p>');
+});
+
+// Batch opt-2026-08-12-c4f585ef lost "Your Responsibilities After the Arrest"
+// even though the section editor returned it: the model wrote the heading and
+// its body as one block, and the compiler put the whole block inside the <h2>.
+test('compiler splits a heading from body text that follows it without a blank line', () => {
+  const html = convertToHTML('## Your Responsibilities After the Arrest\nOnce processed, you have duties:\n- Attend all court dates\n- Comply with bail conditions');
+  equal(html.includes('<h2>Your Responsibilities After the Arrest</h2>'), true);
+  equal(html.includes('<li>Attend all court dates</li>'), true);
+  equal(/<h2>[^<]*<li>/.test(html), false);
+});
+
+test('compiler keeps a heading alone when nothing follows it', () => {
+  equal(convertToHTML('## Standalone Heading'), '<h2>Standalone Heading</h2>');
+  equal(convertToHTML('# Page Title\n\nBody sentence here.'), '<h1>Page Title</h1>\n\n<p>Body sentence here.</p>');
 });
 
 // Batch opt-2026-08-12-a03803a9: every deterministic loss was fixed, and the
