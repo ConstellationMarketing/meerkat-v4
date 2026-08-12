@@ -1325,8 +1325,13 @@ async function runPipeline(payload) {
     }
   } else if (skipExternal && !skipPublish) {
     console.log('[Pipeline] Skipping internal.goconstellation publish (SKIP_PUBLISH_EXTERNAL=1)');
-  } else {
+  } else if (skipPublish) {
     console.log('[Pipeline] Skipping publish (SKIP_PUBLISH=1)');
+  } else {
+    // A blocked publish used to be reported as SKIP_PUBLISH=1 whatever the cause,
+    // which sends whoever reads the log hunting an env flag that was never set.
+    const reason = qc.pass ? `Supabase upsert failed: ${supabaseError}` : `quality gate: ${qc.reason}`;
+    console.log(`[Pipeline] Skipping publish (${reason})`);
   }
 
   // ─── 11. Auto-translate to all languages ──────────────────────────────────
