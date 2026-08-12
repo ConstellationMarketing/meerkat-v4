@@ -11,8 +11,10 @@ const { mergeOptimizeItems } = require('./routes/os-api');
 process.env.ANTHROPIC_API_KEY ||= 'test-key';
 const {
   preservationReviewPreamble, qualityGate, shouldPublishExternally, applyDestructiveLinkTransforms,
-  buildReviewPrompts,
+  buildReviewPrompts, stripPhoneNumbers, postProcess, keepBestPreserved,
 } = require('./pipeline');
+const { compileArticle } = require('./lib/article-compiler');
+const { applyCompliance } = require('./lib/apply-compliance');
 
 let passed = 0;
 let failed = 0;
@@ -271,6 +273,17 @@ test('failure records retain immutable OS batch item identity', () => {
   });
 });
 
+test('preservation text normalization decodes numeric entities', () => {
+  const requirements = buildPreservationRequirements('<h1>What to Do if You&#x2019;re Arrested</h1><p>Body.</p>');
+  equal(preservationIssues('<h1>What to Do if You’re Arrested</h1><p>Body.</p>', requirements), []);
+});
+
+test('edit mode retains phone links through deterministic post-processing', () => {
+  const source = '<p>Call <a href="tel:6304494800">(630) 449-4800</a>.</p>';
+  equal(stripPhoneNumbers(source, true), source);
+  equal(stripPhoneNumbers(source, false).includes('(630) 449-4800'), false);
+});
+
 test('preservation requirements exclude article metadata and sidebar chrome', () => {
   const source = '<article>'
     + '<section><a href="/category/criminal-law/">Criminal Law</a><h1>Arrested in Illinois</h1></section>'
@@ -391,6 +404,177 @@ test('edit review system overrides heading rename rules', () => {
   equal(prompts.system.startsWith('EDIT-MODE OVERRIDE:'), true);
   equal(prompts.system.includes('Never remove or rename any heading listed in ORIGINAL CONTENT'), true);
   equal(prompts.user.includes('Legal Consequences'), true);
+});
+
+// Regression: batch opt-2026-08-12-57171e3e failed the preservation gate on the
+// libertylawfirm.net arrest page even though the model returned the section's
+// links verbatim. The deterministic chain, not the model, was eating them.
+test('edit-mode post-processing keeps every original link in a CTA section', () => {
+  const opening = [
+    '# What to Do if You’re Arrested in Illinois',
+    '',
+    'Facing an arrest can be terrifying. If you are arrested in DuPage County, Illinois, it helps to understand your rights and responsibilities before anything else happens. [Liberty Law](/) can guide you through the process.',
+  ].join('\n');
+  const section = [
+    '## Additional Considerations in DuPage County',
+    '',
+    'Most criminal cases in DuPage County are handled at the courthouse in Wheaton. It is important to hire an attorney who has experience arguing cases in DuPage County.',
+    '',
+    'A skilled criminal defense lawyer at [Liberty Law](/) can help guide you through the criminal justice system and arrest process.',
+    '',
+    'If you require personalized legal advice, please [contact us](/contact/) or call [(630) 449-4800](tel:6304494800). We can help with your specific situation.',
+    '',
+    '[Contact Us](/contact/)',
+  ].join('\n');
+  const processed = postProcess(compileArticle([opening, section]), {
+    clientName: 'Liberty Law',
+    lockKw: null,
+    website: 'https://libertylawfirm.net',
+    isEditMode: true,
+  });
+  equal(preservationIssues(processed, {
+    headings: ['What to Do if You’re Arrested in Illinois', 'Additional Considerations in DuPage County'],
+    links: [
+      { anchor: 'Liberty Law', href: '/' },
+      { anchor: 'Liberty Law', href: '/' },
+      { anchor: 'contact us', href: '/contact/' },
+      { anchor: '(630) 449-4800', href: 'tel:6304494800' },
+      { anchor: 'Contact Us', href: '/contact/' },
+    ],
+  }), []);
+});
+
+// The structural reviewer is a whole-article LLM rewrite. When it returns an
+// article that lost protected content, the pre-review draft is the better one:
+// its only defect is unfixed formatting, which is not a batch-failing offense.
+test('review result is discarded when it loses protected content', () => {
+  const preservation = { headings: ['Contact Our Firm'], links: [{ anchor: 'contact us', href: '/contact/' }] };
+  const before = '<h2>Contact Our Firm</h2><p>Please <a href="/contact/">contact us</a> today.</p>';
+  const reviewed = '<h2>Contact Our Firm</h2><p>Please reach out today.</p>';
+  equal(keepBestPreserved(before, reviewed, preservation, 'structural review'), before);
+});
+
+test('review result is kept when it preserves protected content', () => {
+  const preservation = { headings: ['Contact Our Firm'], links: [{ anchor: 'contact us', href: '/contact/' }] };
+  const before = '<h2>Contact Our Firm</h2><p>Please  <a href="/contact/">contact us</a>  today.</p>';
+  const reviewed = '<h2>Contact Our Firm</h2><p>Please <a href="/contact/">contact us</a> today.</p>';
+  equal(keepBestPreserved(before, reviewed, preservation, 'structural review'), reviewed);
+});
+
+test('review result is kept unchanged when there is nothing to preserve', () => {
+  equal(keepBestPreserved('<p>a</p>', '<p>b</p>', null, 'structural review'), '<p>b</p>');
+});
+
+test('htmlToText survives out-of-range numeric entities', () => {
+  equal(htmlToText('<p>Fee&#1114112;schedule &#x110000; here</p>').includes('schedule'), true);
+});
+
+test('compliance replacements survive a > inside an attribute value', () => {
+  const { htmlContent } = applyCompliance(
+    '<p><a title="x > y" href="/guarantee/">guarantee</a></p>',
+    { violations: [{ term: 'guarantee', replacement: 'work toward' }] }
+  );
+  equal(htmlContent.includes('href="/guarantee/"'), true);
+  equal(htmlContent.includes('title="x > y"'), true);
+  equal(htmlContent.includes('>work toward</a>'), true);
+});
+
+test('FAQ truncation never leaves an inline element unclosed', () => {
+  const out = postProcess(
+    '<h1>T</h1><h2>FAQ</h2><h3>Q?</h3>'
+    + '<p><a href="/x">First one here. Second one here. Third one here.</a> Fourth one here.</p>',
+    { clientName: 'Firm', website: 'https://x.com', isEditMode: false }
+  );
+  equal((out.match(/<a /g) || []).length, (out.match(/<\/a>/g) || []).length);
+});
+
+test('compliance replacements never rewrite HTML attributes', () => {
+  const { htmlContent } = applyCompliance(
+    '<p>We <a href="/guarantee/" title="guarantee">guarantee</a> results.</p>',
+    { violations: [{ term: 'guarantee', replacement: 'work toward' }] }
+  );
+  equal(htmlContent.includes('href="/guarantee/"'), true);
+  equal(htmlContent.includes('title="guarantee"'), true);
+  equal(htmlContent.includes('>work toward</a>'), true);
+});
+
+// deduplicatePhrases and truncateFAQAnswers both used to rebuild a paragraph
+// from its tag-stripped text, which silently deleted every link inside it.
+test('phrase dedup keeps links while removing the repeated word', () => {
+  const out = postProcess(
+    '<h1>Arrested in Illinois</h1>\n<p>Our our team at <a href="/">Liberty Law</a> can help you today, so please <a href="/contact/">contact us</a> about your case.</p>',
+    { clientName: 'Liberty Law', website: 'https://libertylawfirm.net', isEditMode: true }
+  );
+  equal(out.includes('Our our'), false);
+  equal(preservationIssues(out, {
+    headings: [],
+    links: [{ anchor: 'Liberty Law', href: '/' }, { anchor: 'contact us', href: '/contact/' }],
+  }), []);
+});
+
+test('FAQ truncation keeps links inside the sentences it retains', () => {
+  const out = postProcess(
+    '<h1>Arrested in Illinois</h1><h2>FAQ</h2><h3>Who should I call?</h3>'
+    + '<p>Call <a href="/contact/">contact us</a> right away. A lawyer can review the arrest. '
+    + 'Bail terms vary by county. Court dates are set later.</p>',
+    { clientName: 'Liberty Law', website: 'https://libertylawfirm.net', isEditMode: false }
+  );
+  equal(out.includes('Court dates are set later'), false);
+  equal(out.includes('<a href="/contact/">contact us</a>'), true);
+});
+
+test('FAQ truncation is skipped in edit mode so the live page keeps its answers', () => {
+  const answer = '<p>Call <a href="/contact/">contact us</a> right away. A lawyer can review the arrest. '
+    + 'Bail terms vary by county. Court dates are set later.</p>';
+  const out = postProcess(
+    '<h1>Arrested in Illinois</h1><h2>FAQ</h2><h3>Who should I call?</h3>' + answer,
+    { clientName: 'Liberty Law', website: 'https://libertylawfirm.net', isEditMode: true }
+  );
+  equal(out.includes('Court dates are set later'), true);
+});
+
+test('FAQ truncation counts abbreviations as one sentence when markup is present', () => {
+  const out = postProcess(
+    '<h1>Arrested in Illinois</h1><h2>FAQ</h2><h3>Who reviews the file?</h3>'
+    + '<p>Dr. Smith reviews the intake with <a href="/contact/">our team</a>. '
+    + 'A lawyer then reads the police report. '
+    + 'Bail terms vary by county. Court dates are set later.</p>',
+    { clientName: 'Liberty Law', website: 'https://libertylawfirm.net', isEditMode: false }
+  );
+  equal(out.includes('<a href="/contact/">our team</a>'), true);
+  equal(out.includes('A lawyer then reads the police report.'), true);
+  equal(out.includes('Bail terms vary by county'), false);
+});
+
+test('FAQ truncation falls back to text when abbreviations break the HTML split', () => {
+  const out = postProcess(
+    '<h1>Arrested in Illinois</h1><h2>FAQ</h2><h3>Who reviews the file?</h3>'
+    + '<p>Dr. Smith reviews the intake with you. A lawyer then reads the police report. '
+    + 'Bail terms vary by county. Court dates are set later.</p>',
+    { clientName: 'Liberty Law', website: 'https://libertylawfirm.net', isEditMode: false }
+  );
+  equal(out.includes('Dr. Smith reviews the intake with you.'), true);
+  equal(out.includes('A lawyer then reads the police report.'), true);
+  equal(out.includes('Court dates are set later'), false);
+});
+
+// The generators rewrite ’ as ', – as -, and … as ... . That is typography, not
+// lost content, and it must not fail the preservation gate.
+test('preservation tolerates typographic punctuation swaps', () => {
+  const requirements = buildPreservationRequirements(
+    '<h1>What to Do if You’re Arrested</h1><h2>Fees – What to Expect</h2>'
+    + '<p><a href="/contact/">Let’s talk</a></p>'
+  );
+  equal(preservationIssues(
+    "<h1>What to Do if You're Arrested</h1><h2>Fees - What to Expect</h2>"
+    + '<p><a href="/contact/">Let\'s talk</a></p>',
+    requirements
+  ), []);
+});
+
+test('preservation still rejects genuinely different heading text', () => {
+  const requirements = buildPreservationRequirements('<h1>What to Do if You’re Arrested</h1>');
+  equal(preservationIssues('<h1>What to Do After an Arrest</h1>', requirements).length, 1);
 });
 
 test('review preamble lists the exact original content that must survive', () => {

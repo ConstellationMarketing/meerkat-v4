@@ -7,6 +7,7 @@ const { compileArticle } = require('./lib/article-compiler');
 const { insertLinks } = require('./lib/insert-links');
 const { minimumWordCount, preservationIssues } = require('./lib/optimize');
 const { applyCompliance } = require('./lib/apply-compliance');
+const { replaceOutsideTags } = require('./lib/html-text');
 const { scoreArticle } = require('./lib/scoring');
 const { upsertArticle } = require('./lib/supabase');
 const { publishArticle } = require('./lib/github-publish');
@@ -365,7 +366,8 @@ function deduplicateLinks(html) {
 }
 
 // Post-processing: strip phone numbers from article body
-function stripPhoneNumbers(html) {
+function stripPhoneNumbers(html, editMode = false) {
+  if (editMode) return html;
   // Match common US phone formats, ordered from most specific to least
   return html.replace(/<p>([\s\S]*?)<\/p>/gi, (match, content) => {
     const cleaned = content
@@ -411,8 +413,28 @@ function fixCTALinks(html, website) {
   return html;
 }
 
-// Post-processing: truncate FAQ answers to max 2 sentences
-function truncateFAQAnswers(html) {
+const VOID_TAGS = /^(br|img|hr|input|meta|link|source|wbr)$/i;
+
+// Every element opened in this fragment is also closed in it.
+function tagsBalanced(html) {
+  const depth = new Map();
+  for (const [, name, selfClosing] of html.matchAll(/<([a-zA-Z][\w-]*)\b[^>]*?(\/?)>/g)) {
+    if (selfClosing || VOID_TAGS.test(name)) continue;
+    const key = name.toLowerCase();
+    depth.set(key, (depth.get(key) || 0) + 1);
+  }
+  for (const [, name] of html.matchAll(/<\/([a-zA-Z][\w-]*)\s*>/g)) {
+    const key = name.toLowerCase();
+    depth.set(key, (depth.get(key) || 0) - 1);
+  }
+  return [...depth.values()].every(n => n === 0);
+}
+
+// Post-processing: truncate FAQ answers to max 2 sentences. Edit-mode
+// optimizations keep the live page's own FAQ at its own length — cutting its
+// answers would drop original content the preservation gate requires.
+function truncateFAQAnswers(html, editMode = false) {
+  if (editMode) return html;
   // Find the FAQ section — H2 containing "FAQ" or "Frequently Asked"
   const faqHeaderIdx = html.search(/<h2>[^<]*(FAQ|Frequently Asked)[^<]*<\/h2>/i);
   if (faqHeaderIdx === -1) return html;
@@ -428,6 +450,23 @@ function truncateFAQAnswers(html) {
       const textOnly = answerContent.replace(/<[^>]+>/g, '').trim();
       const sentences = splitSentences(textOnly);
       if (!sentences || sentences.length <= 2) return match;
+
+      // Answers carrying inline markup are truncated on the HTML itself, so the
+      // sentences we keep keep their links and bold instead of going flat.
+      if (/<[^/][^>]*>/.test(answerContent)) {
+        // The naive split also fires on abbreviations ("Dr. Smith"), so grow the
+        // kept HTML until its plain text holds two real sentences.
+        const pieces = answerContent.split(/(?<=[.!?])\s+(?=[A-Z<])/);
+        let kept = '';
+        for (const piece of pieces) {
+          kept = kept ? `${kept} ${piece}` : piece;
+          // A sentence boundary can fall inside a link. Keep going past the
+          // two-sentence mark rather than cutting an element open.
+          if ((splitSentences(kept.replace(/<[^>]+>/g, '')) || []).length >= 2 && tagsBalanced(kept)) break;
+        }
+        if (kept.trim() === answerContent.trim()) return match;
+        return `${h3}${pOpen}${kept.trim()}${pClose}`;
+      }
 
       // Keep first 2 sentences
       const truncated = sentences.slice(0, 2).join('').trim();
@@ -519,17 +558,15 @@ function deduplicatePhrases(html) {
 
     // Detect repeated phrases: 2-6 word sequences that appear back-to-back
     // Handles "from day one from day one", "clear guidance, clear guidance", etc.
-    let fixed = textOnly;
-    // Match phrase repeated with optional comma/space between
-    fixed = fixed.replace(/\b((?:\w+\s+){1,5}\w+)[\s,]+\1\b/gi, '$1');
-    // Match single repeated words: "help help", "the the"
-    fixed = fixed.replace(/\b(\w+)\s+\1\b/gi, '$1');
+    // Rewrite each text run between tags on its own — rebuilding the paragraph
+    // from tag-stripped text deleted every link and bold marker inside it.
+    const fixed = replaceOutsideTags(content, text => text
+      // Match phrase repeated with optional comma/space between
+      .replace(/\b((?:\w+\s+){1,5}\w+)[\s,]+\1\b/gi, '$1')
+      // Match single repeated words: "help help", "the the"
+      .replace(/\b(\w+)\s+\1\b/gi, '$1'));
 
-    if (fixed !== textOnly) {
-      // Replace in the original HTML-containing content, preserving tags
-      // Use the text-only version since dedup may shift positions
-      return `<p>${fixed}</p>`;
-    }
+    if (fixed !== content) return `<p>${fixed}</p>`;
     return match;
   });
 }
@@ -592,6 +629,26 @@ function capH3Density(html) {
   return result;
 }
 
+// The deterministic post-processing chain. Runs after every LLM pass that can
+// reintroduce structural problems (review, repair, compliance), so all three
+// call sites stay identical and stay testable as one unit.
+function postProcess(html, { clientName, lockKw, website, isEditMode } = {}) {
+  let out = enforceSingleH1(html);
+  out = stripPlaceholders(out, clientName);
+  out = stripLinksFromHeadings(out);
+  out = fixMalformedH3(out);
+  out = lockH1ToKeyword(out, lockKw);
+  out = enforceTaglineLength(out);
+  out = stripForbiddenWords(out);
+  out = applyDestructiveLinkTransforms(out, website, isEditMode);
+  out = truncateFAQAnswers(out, isEditMode);
+  out = splitLongParagraphs(out);
+  if (!isEditMode) out = enforceAnchorTextLength(out);
+  out = deduplicatePhrases(out);
+  out = stripPhoneNumbers(out, isEditMode);
+  return capH3Density(out);
+}
+
 // Word count targets by template for quality gating
 const TEMPLATE_WORD_TARGETS = {
   'Practice Page': 2007,
@@ -650,6 +707,29 @@ function qualityGate(content, sections, template, wordCount, formatWarnings = []
   }
 
   return { pass: true, issues };
+}
+
+// Edit-mode only: name the stage that drops a protected heading or link, so a
+// preservation failure points at the pass that caused it instead of just the
+// quality gate that caught it.
+function trackPreservation(stage, html, preservation, seen = []) {
+  if (!preservation) return seen;
+  const issues = preservationIssues(html, preservation);
+  const lost = issues.filter(issue => !seen.includes(issue));
+  if (lost.length) console.warn(`[Preserve] ${stage} dropped: ${lost.join(' | ')}`);
+  else console.log(`[Preserve] ${stage}: ${issues.length} outstanding`);
+  return issues;
+}
+
+// A whole-article LLM rewrite that came back missing protected content is worth
+// less than the draft it replaced: the draft's only defect is the formatting
+// that pass would have fixed, while its replacement fails the batch outright.
+function keepBestPreserved(before, after, preservation, stage) {
+  if (!preservation) return after;
+  const lost = preservationIssues(after, preservation).length - preservationIssues(before, preservation).length;
+  if (lost <= 0) return after;
+  console.warn(`[Preserve] discarding ${stage} output — it dropped ${lost} protected item(s)`);
+  return before;
 }
 
 function recommendationLines(recs) {
@@ -858,10 +938,12 @@ async function runPipeline(payload) {
   htmlContent = lockH1ToKeyword(htmlContent, lockKw);
   htmlContent = enforceTaglineLength(htmlContent);
   htmlContent = stripForbiddenWords(htmlContent);
-  htmlContent = truncateFAQAnswers(htmlContent);
+  htmlContent = truncateFAQAnswers(htmlContent, isEditMode);
   htmlContent = splitLongParagraphs(htmlContent);
-  htmlContent = stripPhoneNumbers(htmlContent);
+  htmlContent = stripPhoneNumbers(htmlContent, isEditMode);
   htmlContent = capH3Density(htmlContent);
+  const preservation = payload.optimization?.preservation || null;
+  let preserveSeen = trackPreservation('section generation', htmlContent, preservation);
 
   // ─── 3. Parallel: external links + internal links + title/meta ─────────────
   console.log('[Pipeline] Running link enrichment and title/meta in parallel...');
@@ -922,8 +1004,9 @@ async function runPipeline(payload) {
   linkedHTML = applyDestructiveLinkTransforms(linkedHTML, website, isEditMode);
   if (!isEditMode) linkedHTML = enforceAnchorTextLength(linkedHTML);
   linkedHTML = deduplicatePhrases(linkedHTML);
-  linkedHTML = stripPhoneNumbers(linkedHTML);
+  linkedHTML = stripPhoneNumbers(linkedHTML, isEditMode);
   linkedHTML = capH3Density(linkedHTML);
+  preserveSeen = trackPreservation('link enrichment', linkedHTML, preservation, preserveSeen);
 
   // ─── 5. Build full content with SEO header ─────────────────────────────────
   let titleMeta = { titleTag: '', description: '' };
@@ -957,23 +1040,10 @@ async function runPipeline(payload) {
         console.log(`  - [${issue.type}] ${issue.description}`);
       });
       if (reviewResult.fixed_article) {
-        fullContent = sanitizeReviewedHTML(reviewResult.fixed_article);
-        // Re-run post-processing after review fixes (review may reintroduce issues)
-        fullContent = enforceSingleH1(fullContent);
-        fullContent = stripPlaceholders(fullContent, clientName);
-        fullContent = stripLinksFromHeadings(fullContent);
-        fullContent = fixMalformedH3(fullContent);
-        fullContent = lockH1ToKeyword(fullContent, lockKw);
-        fullContent = enforceTaglineLength(fullContent);
-        fullContent = stripForbiddenWords(fullContent);
-        fullContent = applyDestructiveLinkTransforms(fullContent, website, isEditMode);
-        fullContent = truncateFAQAnswers(fullContent);
-        fullContent = splitLongParagraphs(fullContent);
-        if (!isEditMode) fullContent = enforceAnchorTextLength(fullContent);
-        fullContent = deduplicatePhrases(fullContent);
-        fullContent = stripPhoneNumbers(fullContent);
-        fullContent = capH3Density(fullContent);
-        console.log('[Pipeline] Applied structural fixes from review');
+        const reviewed = postProcess(sanitizeReviewedHTML(reviewResult.fixed_article),
+          { clientName, lockKw, website, isEditMode });
+        fullContent = keepBestPreserved(fullContent, reviewed, preservation, 'structural review');
+        if (fullContent === reviewed) console.log('[Pipeline] Applied structural fixes from review');
       }
     } else {
       console.log('[Pipeline] Review passed — no structural issues found');
@@ -982,6 +1052,7 @@ async function runPipeline(payload) {
     console.error('Article review failed:', e.message);
     // Non-fatal — continue with original content
   }
+  preserveSeen = trackPreservation('structural review', fullContent, preservation, preserveSeen);
 
   // ─── 5c. Targeted structural repair ────────────────────────────────────
   // Every repair in this pass enforces new-article template shape (intro
@@ -1004,20 +1075,7 @@ async function runPipeline(payload) {
       console.log(`[Pipeline] Structural repairs applied (${repairResult.repairs.length}):`);
       repairResult.repairs.forEach(r => console.log(`  ✓ ${r}`));
       // Re-run deterministic post-processing after repairs
-      fullContent = enforceSingleH1(fullContent);
-      fullContent = stripPlaceholders(fullContent, clientName);
-      fullContent = stripLinksFromHeadings(fullContent);
-      fullContent = fixMalformedH3(fullContent);
-      fullContent = lockH1ToKeyword(fullContent, lockKw);
-      fullContent = enforceTaglineLength(fullContent);
-      fullContent = stripForbiddenWords(fullContent);
-      fullContent = applyDestructiveLinkTransforms(fullContent, website, isEditMode);
-      fullContent = truncateFAQAnswers(fullContent);
-      fullContent = splitLongParagraphs(fullContent);
-      if (!isEditMode) fullContent = enforceAnchorTextLength(fullContent);
-      fullContent = deduplicatePhrases(fullContent);
-      fullContent = stripPhoneNumbers(fullContent);
-      fullContent = capH3Density(fullContent);
+      fullContent = postProcess(fullContent, { clientName, lockKw, website, isEditMode });
     } else {
       console.log('[Pipeline] No structural repairs needed');
     }
@@ -1042,20 +1100,8 @@ async function runPipeline(payload) {
 
   let { htmlContent: cleanedContent } = applyCompliance(fullContent, complianceResult);
   // Re-run post-processing after compliance fixes
-  cleanedContent = enforceSingleH1(cleanedContent);
-  cleanedContent = stripPlaceholders(cleanedContent, clientName);
-  cleanedContent = stripLinksFromHeadings(cleanedContent);
-  cleanedContent = fixMalformedH3(cleanedContent);
-  cleanedContent = lockH1ToKeyword(cleanedContent, lockKw);
-  cleanedContent = enforceTaglineLength(cleanedContent);
-  cleanedContent = stripForbiddenWords(cleanedContent);
-  cleanedContent = applyDestructiveLinkTransforms(cleanedContent, website, isEditMode);
-  cleanedContent = truncateFAQAnswers(cleanedContent);
-  cleanedContent = splitLongParagraphs(cleanedContent);
-  if (!isEditMode) cleanedContent = enforceAnchorTextLength(cleanedContent);
-  cleanedContent = deduplicatePhrases(cleanedContent);
-  cleanedContent = stripPhoneNumbers(cleanedContent);
-  cleanedContent = capH3Density(cleanedContent);
+  cleanedContent = postProcess(cleanedContent, { clientName, lockKw, website, isEditMode });
+  preserveSeen = trackPreservation('legal compliance', cleanedContent, preservation, preserveSeen);
 
   // ─── 6b. Validate external links and statute citations ────────────────────
   const externalLinkCount = countExternalLinks(cleanedContent);
@@ -1295,5 +1341,6 @@ async function runPipeline(payload) {
 
 module.exports = {
   runPipeline, enforceTaglineLength, preservationReviewPreamble, qualityGate,
-  shouldPublishExternally, applyDestructiveLinkTransforms, buildReviewPrompts,
+  shouldPublishExternally, applyDestructiveLinkTransforms, buildReviewPrompts, stripPhoneNumbers,
+  postProcess, keepBestPreserved,
 };
