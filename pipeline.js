@@ -430,6 +430,14 @@ function truncateFAQAnswers(html) {
       const sentences = splitSentences(textOnly);
       if (!sentences || sentences.length <= 2) return match;
 
+      // Answers carrying inline markup are truncated on the HTML itself, so the
+      // sentences we keep keep their links and bold instead of going flat.
+      if (/<[^/][^>]*>/.test(answerContent)) {
+        const htmlSentences = answerContent.split(/(?<=[.!?])\s+(?=[A-Z<])/);
+        if (htmlSentences.length <= 2) return match;
+        return `${h3}${pOpen}${htmlSentences.slice(0, 2).join(' ').trim()}${pClose}`;
+      }
+
       // Keep first 2 sentences
       const truncated = sentences.slice(0, 2).join('').trim();
       return `${h3}${pOpen}${truncated}${pClose}`;
@@ -520,17 +528,18 @@ function deduplicatePhrases(html) {
 
     // Detect repeated phrases: 2-6 word sequences that appear back-to-back
     // Handles "from day one from day one", "clear guidance, clear guidance", etc.
-    let fixed = textOnly;
-    // Match phrase repeated with optional comma/space between
-    fixed = fixed.replace(/\b((?:\w+\s+){1,5}\w+)[\s,]+\1\b/gi, '$1');
-    // Match single repeated words: "help help", "the the"
-    fixed = fixed.replace(/\b(\w+)\s+\1\b/gi, '$1');
+    // Rewrite each text run between tags on its own — rebuilding the paragraph
+    // from tag-stripped text deleted every link and bold marker inside it.
+    const fixed = content
+      .split(/(<[^>]*>)/)
+      .map(part => (part.startsWith('<') ? part : part
+        // Match phrase repeated with optional comma/space between
+        .replace(/\b((?:\w+\s+){1,5}\w+)[\s,]+\1\b/gi, '$1')
+        // Match single repeated words: "help help", "the the"
+        .replace(/\b(\w+)\s+\1\b/gi, '$1')))
+      .join('');
 
-    if (fixed !== textOnly) {
-      // Replace in the original HTML-containing content, preserving tags
-      // Use the text-only version since dedup may shift positions
-      return `<p>${fixed}</p>`;
-    }
+    if (fixed !== content) return `<p>${fixed}</p>`;
     return match;
   });
 }

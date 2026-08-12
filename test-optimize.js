@@ -14,6 +14,7 @@ const {
   buildReviewPrompts, stripPhoneNumbers, postProcess,
 } = require('./pipeline');
 const { compileArticle } = require('./lib/article-compiler');
+const { applyCompliance } = require('./lib/apply-compliance');
 
 let passed = 0;
 let failed = 0;
@@ -440,6 +441,44 @@ test('edit-mode post-processing keeps every original link in a CTA section', () 
       { anchor: '(630) 449-4800', href: 'tel:6304494800' },
       { anchor: 'Contact Us', href: '/contact/' },
     ],
+  }), []);
+});
+
+test('compliance replacements never rewrite HTML attributes', () => {
+  const { htmlContent } = applyCompliance(
+    '<p>We <a href="/guarantee/" title="guarantee">guarantee</a> results.</p>',
+    { violations: [{ term: 'guarantee', replacement: 'work toward' }] }
+  );
+  equal(htmlContent.includes('href="/guarantee/"'), true);
+  equal(htmlContent.includes('title="guarantee"'), true);
+  equal(htmlContent.includes('>work toward</a>'), true);
+});
+
+// deduplicatePhrases and truncateFAQAnswers both used to rebuild a paragraph
+// from its tag-stripped text, which silently deleted every link inside it.
+test('phrase dedup keeps links while removing the repeated word', () => {
+  const out = postProcess(
+    '<h1>Arrested in Illinois</h1>\n<p>Our our team at <a href="/">Liberty Law</a> can help you today, so please <a href="/contact/">contact us</a> about your case.</p>',
+    { clientName: 'Liberty Law', website: 'https://libertylawfirm.net', isEditMode: true }
+  );
+  equal(out.includes('Our our'), false);
+  equal(preservationIssues(out, {
+    headings: [],
+    links: [{ anchor: 'Liberty Law', href: '/' }, { anchor: 'contact us', href: '/contact/' }],
+  }), []);
+});
+
+test('FAQ truncation keeps links inside the sentences it retains', () => {
+  const out = postProcess(
+    '<h1>Arrested in Illinois</h1>\n<h2>FAQ</h2>\n<h3>Who should I call?</h3>\n'
+    + '<p>Call <a href="/contact/">contact us</a> right away. A lawyer can review the arrest. '
+    + 'Bail terms vary by county. Court dates are set later.</p>',
+    { clientName: 'Liberty Law', website: 'https://libertylawfirm.net', isEditMode: true }
+  );
+  equal(out.includes('Court dates are set later'), false);
+  equal(preservationIssues(out, {
+    headings: [],
+    links: [{ anchor: 'contact us', href: '/contact/' }],
   }), []);
 });
 
