@@ -491,6 +491,11 @@ function stripDirectoryLinks(html) {
   });
 }
 
+function applyDestructiveLinkTransforms(html, website, editMode) {
+  if (editMode) return html;
+  return fixCTALinks(stripDirectoryLinks(deduplicateLinks(html)), website);
+}
+
 // Post-processing: strip internal links with anchor text under 3 words (too generic)
 function enforceAnchorTextLength(html) {
   return html.replace(/<a\s+([^>]*href="([^"]*)"[^>]*)>([\s\S]*?)<\/a>/gi, (match, attrs, url, text) => {
@@ -651,11 +656,27 @@ function recommendationLines(recs) {
   return (recs || []).map(r => `- [${(r.checks || []).join(', ')}] ${r.fix}`).join('\n');
 }
 
+function shouldPublishExternally({ skipPublish, skipExternal, qcPass, supabaseError }) {
+  return !skipPublish && !skipExternal && qcPass && !supabaseError;
+}
+
 function preservationReviewPreamble(preservation) {
   if (!preservation) return '';
   const headings = (preservation.headings || []).map(heading => `- ${heading}`).join('\n');
   const links = (preservation.links || []).map(link => `- ${link.anchor} -> ${link.href}`).join('\n');
   return `ORIGINAL CONTENT THAT MUST SURVIVE EXACTLY:\nHeadings:\n${headings || '- none'}\nLinks:\n${links || '- none'}\n\n`;
+}
+
+function buildReviewPrompts(reviewPrompt, editMode, preservation) {
+  if (!editMode) return reviewPrompt;
+  return {
+    system: 'EDIT-MODE OVERRIDE: Never remove or rename any heading listed in ORIGINAL CONTENT. '
+      + 'Never remove, rename, or repoint any listed original link. These rules override every conflicting checklist item below.\n\n'
+      + reviewPrompt.system,
+    user: 'THIS ARTICLE IS AN OPTIMIZATION OF AN EXISTING LIVE PAGE. Its sections mirror the live page and must ALL survive review: do NOT remove, relocate, or rewrite-away any section, even where a template rule says the section type does not belong on this page type, and do NOT shorten an existing CTA section for being promotional. Still fix broken paragraphs, duplicated content, grammar, and formatting without changing protected headings or links.\n\n'
+      + preservationReviewPreamble(preservation)
+      + reviewPrompt.user,
+  };
 }
 
 function optimizationPreamble(opt, { includeBefore = true } = {}) {
@@ -898,12 +919,10 @@ async function runPipeline(payload) {
 
   const allLinks = [...externalLinks, ...internalLinks];
   let { htmlContent: linkedHTML } = insertLinks(htmlContent, allLinks);
-  linkedHTML = deduplicateLinks(linkedHTML);
-  linkedHTML = stripDirectoryLinks(linkedHTML);
+  linkedHTML = applyDestructiveLinkTransforms(linkedHTML, website, isEditMode);
   if (!isEditMode) linkedHTML = enforceAnchorTextLength(linkedHTML);
   linkedHTML = deduplicatePhrases(linkedHTML);
   linkedHTML = stripPhoneNumbers(linkedHTML);
-  linkedHTML = fixCTALinks(linkedHTML, website);
   linkedHTML = capH3Density(linkedHTML);
 
   // ─── 5. Build full content with SEO header ─────────────────────────────────
@@ -928,12 +947,8 @@ async function runPipeline(payload) {
     // Edit-mode optimizations preserve the live page: the reviewer must not
     // enforce template section rules against sections the page already has
     // (the attlaw dry run deleted the firm's own "How We Can Help" section).
-    const reviewUser = isEditMode
-      ? 'THIS ARTICLE IS AN OPTIMIZATION OF AN EXISTING LIVE PAGE. Its sections mirror the live page and must ALL survive review: do NOT remove, relocate, or rewrite-away any section, even where a template rule says the section type does not belong on this page type, and do NOT shorten an existing CTA section for being promotional. Still fix broken paragraphs, duplicated content, bad links, grammar, and formatting.\n\n'
-        + preservationReviewPreamble(payload.optimization?.preservation)
-        + reviewPrompt.user
-      : reviewPrompt.user;
-    const reviewRaw = await callClaude(reviewPrompt.system, reviewUser, 'claude-sonnet-4-6');
+    const hardenedReview = buildReviewPrompts(reviewPrompt, isEditMode, payload.optimization?.preservation);
+    const reviewRaw = await callClaude(hardenedReview.system, hardenedReview.user, 'claude-sonnet-4-6');
     reviewResult = parseJSON(reviewRaw);
 
     if (reviewResult.issues && reviewResult.issues.length > 0) {
@@ -951,14 +966,12 @@ async function runPipeline(payload) {
         fullContent = lockH1ToKeyword(fullContent, lockKw);
         fullContent = enforceTaglineLength(fullContent);
         fullContent = stripForbiddenWords(fullContent);
-        fullContent = deduplicateLinks(fullContent);
+        fullContent = applyDestructiveLinkTransforms(fullContent, website, isEditMode);
         fullContent = truncateFAQAnswers(fullContent);
         fullContent = splitLongParagraphs(fullContent);
-        fullContent = stripDirectoryLinks(fullContent);
         if (!isEditMode) fullContent = enforceAnchorTextLength(fullContent);
         fullContent = deduplicatePhrases(fullContent);
         fullContent = stripPhoneNumbers(fullContent);
-        fullContent = fixCTALinks(fullContent, website);
         fullContent = capH3Density(fullContent);
         console.log('[Pipeline] Applied structural fixes from review');
       }
@@ -998,14 +1011,12 @@ async function runPipeline(payload) {
       fullContent = lockH1ToKeyword(fullContent, lockKw);
       fullContent = enforceTaglineLength(fullContent);
       fullContent = stripForbiddenWords(fullContent);
-      fullContent = deduplicateLinks(fullContent);
+      fullContent = applyDestructiveLinkTransforms(fullContent, website, isEditMode);
       fullContent = truncateFAQAnswers(fullContent);
       fullContent = splitLongParagraphs(fullContent);
-      fullContent = stripDirectoryLinks(fullContent);
-      fullContent = enforceAnchorTextLength(fullContent);
+      if (!isEditMode) fullContent = enforceAnchorTextLength(fullContent);
       fullContent = deduplicatePhrases(fullContent);
       fullContent = stripPhoneNumbers(fullContent);
-      fullContent = fixCTALinks(fullContent, website);
       fullContent = capH3Density(fullContent);
     } else {
       console.log('[Pipeline] No structural repairs needed');
@@ -1038,14 +1049,12 @@ async function runPipeline(payload) {
   cleanedContent = lockH1ToKeyword(cleanedContent, lockKw);
   cleanedContent = enforceTaglineLength(cleanedContent);
   cleanedContent = stripForbiddenWords(cleanedContent);
-  cleanedContent = deduplicateLinks(cleanedContent);
+  cleanedContent = applyDestructiveLinkTransforms(cleanedContent, website, isEditMode);
   cleanedContent = truncateFAQAnswers(cleanedContent);
   cleanedContent = splitLongParagraphs(cleanedContent);
-  cleanedContent = stripDirectoryLinks(cleanedContent);
   if (!isEditMode) cleanedContent = enforceAnchorTextLength(cleanedContent);
   cleanedContent = deduplicatePhrases(cleanedContent);
   cleanedContent = stripPhoneNumbers(cleanedContent);
-  cleanedContent = fixCTALinks(cleanedContent, website);
   cleanedContent = capH3Density(cleanedContent);
 
   // ─── 6b. Validate external links and statute citations ────────────────────
@@ -1232,7 +1241,7 @@ async function runPipeline(payload) {
   // ─── 10. Publish to internal.goconstellation.com ─────────────────────────
   // SKIP_PUBLISH_EXTERNAL suppresses external sends without blocking Supabase.
   let publishedUrl = null;
-  if (!skipPublish && !skipExternal) {
+  if (shouldPublishExternally({ skipPublish, skipExternal, qcPass: qc.pass, supabaseError })) {
     try {
       publishedUrl = await publishArticle({
       articleId,
@@ -1284,4 +1293,7 @@ async function runPipeline(payload) {
   };
 }
 
-module.exports = { runPipeline, enforceTaglineLength, preservationReviewPreamble, qualityGate };
+module.exports = {
+  runPipeline, enforceTaglineLength, preservationReviewPreamble, qualityGate,
+  shouldPublishExternally, applyDestructiveLinkTransforms, buildReviewPrompts,
+};
