@@ -223,7 +223,7 @@ test('edit-mode word gate never allows fewer than 1000 words', () => {
   equal(minimumWordCount(900, true), 1000);
 });
 
-test('short edit pages receive enough section target for a 1000-word final draft', () => {
+test('short edit pages receive enough section target to land in the full-marks word band', () => {
   const parsed = {
     h1: 'What Is Considered a Criminal Offense in Illinois?',
     intro: { text: 'Short opening.', words: 76 },
@@ -237,7 +237,7 @@ test('short edit pages receive enough section target for a 1000-word final draft
     totalWords: 615,
   };
   const jobs = buildEditSections(parsed, []);
-  equal(jobs.reduce((total, job) => total + job.wordCount, 0), 1250);
+  equal(jobs.reduce((total, job) => total + job.wordCount, 0), 1550);
   equal(jobs.slice(0, 4).map(job => job.name), [
     'Page opening',
     'Categories of Criminal Offenses',
@@ -383,6 +383,42 @@ test('quality gate blocks edit output that drops preserved content', () => {
     'Missing original heading: Categories of Criminal Offenses',
     'Missing original link: misdemeanor (/misdemeanor/)',
   ]);
+});
+
+const PRESERVED_DRAFT = '<h1>What To Do if You are Arrested</h1><h2>Your Rights</h2>'
+  + '<p>Call <a href="/contact/">Contact Us</a> to discuss the charge.</p>';
+const ARRESTED_PAGE = {
+  headings: ['What To Do if You are Arrested', 'Your Rights'],
+  links: [{ anchor: 'Contact Us', href: '/contact/' }],
+};
+
+test('a preserved edit draft under the word target is saved with a warning, not discarded', () => {
+  const result = qualityGate(PRESERVED_DRAFT, [{ sectionNumber: 1 }], 'Practice Page', 998, [], 572, true, ARRESTED_PAGE);
+  equal(result.pass, true);
+  equal(result.issues, ['Word count 998 below minimum 1000 (edit-preservation gate for 572 target)']);
+});
+
+test('an edit draft shorter than the live page it replaces still fails', () => {
+  const result = qualityGate(PRESERVED_DRAFT, [{ sectionNumber: 1 }], 'Practice Page', 500, [], 572, true, ARRESTED_PAGE);
+  equal(result.pass, false);
+  equal(result.reason, 'below-word-count');
+});
+
+test('a short edit draft that also lost content reports the lost content', () => {
+  const result = qualityGate('<h1>What To Do if You are Arrested</h1><p>body</p>', [{ sectionNumber: 1 }], 'Practice Page', 400, [], 572, true, ARRESTED_PAGE);
+  equal(result.reason, 'missing-original-content');
+});
+
+test('an edit draft with no known original length still fails hard on word count', () => {
+  const result = qualityGate(PRESERVED_DRAFT, [{ sectionNumber: 1 }], 'Practice Page', 998, [], null, true, ARRESTED_PAGE);
+  equal(result.pass, false);
+  equal(result.reason, 'below-word-count');
+});
+
+test('compose-mode drafts still fail hard on word count', () => {
+  const result = qualityGate('<h1>Title</h1><p>body</p>', [{ sectionNumber: 1 }], 'Practice Page', 500, [], 2007, false, null);
+  equal(result.pass, false);
+  equal(result.reason, 'below-word-count');
 });
 
 test('optimization prompts preserve exact headings and links through proofreading', () => {
