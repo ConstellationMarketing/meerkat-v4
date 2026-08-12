@@ -514,6 +514,18 @@ test('compliance replacements survive a > inside an attribute value', () => {
   equal(htmlContent.includes('>work toward</a>'), true);
 });
 
+// A bare "<" in prose ("resolve in < 5 years") must not start a pseudo-tag
+// that swallows the text up to the next real tag and hides it from rewriting.
+test('compliance replacements survive a stray < in body text', () => {
+  const { htmlContent } = applyCompliance(
+    '<p>Cases resolve in < 5 years and we guarantee results.</p><p>Call us.</p>',
+    { violations: [{ term: 'guarantee', replacement: 'work toward' }] }
+  );
+  equal(htmlContent.includes('work toward'), true);
+  equal(htmlContent.includes('guarantee'), false);
+  equal(htmlContent.includes('< 5 years'), true);
+});
+
 test('FAQ truncation never leaves an inline element unclosed', () => {
   const out = postProcess(
     '<h1>T</h1><h2>FAQ</h2><h3>Q?</h3>'
