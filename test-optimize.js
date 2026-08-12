@@ -11,8 +11,9 @@ const { mergeOptimizeItems } = require('./routes/os-api');
 process.env.ANTHROPIC_API_KEY ||= 'test-key';
 const {
   preservationReviewPreamble, qualityGate, shouldPublishExternally, applyDestructiveLinkTransforms,
-  buildReviewPrompts,
+  buildReviewPrompts, stripPhoneNumbers, postProcess,
 } = require('./pipeline');
+const { compileArticle } = require('./lib/article-compiler');
 
 let passed = 0;
 let failed = 0;
@@ -271,6 +272,17 @@ test('failure records retain immutable OS batch item identity', () => {
   });
 });
 
+test('preservation text normalization decodes numeric entities', () => {
+  const requirements = buildPreservationRequirements('<h1>What to Do if You&#x2019;re Arrested</h1><p>Body.</p>');
+  equal(preservationIssues('<h1>What to Do if You’re Arrested</h1><p>Body.</p>', requirements), []);
+});
+
+test('edit mode retains phone links through deterministic post-processing', () => {
+  const source = '<p>Call <a href="tel:6304494800">(630) 449-4800</a>.</p>';
+  equal(stripPhoneNumbers(source, true), source);
+  equal(stripPhoneNumbers(source, false).includes('(630) 449-4800'), false);
+});
+
 test('preservation requirements exclude article metadata and sidebar chrome', () => {
   const source = '<article>'
     + '<section><a href="/category/criminal-law/">Criminal Law</a><h1>Arrested in Illinois</h1></section>'
@@ -391,6 +403,63 @@ test('edit review system overrides heading rename rules', () => {
   equal(prompts.system.startsWith('EDIT-MODE OVERRIDE:'), true);
   equal(prompts.system.includes('Never remove or rename any heading listed in ORIGINAL CONTENT'), true);
   equal(prompts.user.includes('Legal Consequences'), true);
+});
+
+// Regression: batch opt-2026-08-12-57171e3e failed the preservation gate on the
+// libertylawfirm.net arrest page even though the model returned the section's
+// links verbatim. The deterministic chain, not the model, was eating them.
+test('edit-mode post-processing keeps every original link in a CTA section', () => {
+  const opening = [
+    '# What to Do if You’re Arrested in Illinois',
+    '',
+    'Facing an arrest can be terrifying. If you are arrested in DuPage County, Illinois, it helps to understand your rights and responsibilities before anything else happens. [Liberty Law](/) can guide you through the process.',
+  ].join('\n');
+  const section = [
+    '## Additional Considerations in DuPage County',
+    '',
+    'Most criminal cases in DuPage County are handled at the courthouse in Wheaton. It is important to hire an attorney who has experience arguing cases in DuPage County.',
+    '',
+    'A skilled criminal defense lawyer at [Liberty Law](/) can help guide you through the criminal justice system and arrest process.',
+    '',
+    'If you require personalized legal advice, please [contact us](/contact/) or call [(630) 449-4800](tel:6304494800). We can help with your specific situation.',
+    '',
+    '[Contact Us](/contact/)',
+  ].join('\n');
+  const processed = postProcess(compileArticle([opening, section]), {
+    clientName: 'Liberty Law',
+    lockKw: null,
+    website: 'https://libertylawfirm.net',
+    isEditMode: true,
+  });
+  equal(preservationIssues(processed, {
+    headings: ['What to Do if You’re Arrested in Illinois', 'Additional Considerations in DuPage County'],
+    links: [
+      { anchor: 'Liberty Law', href: '/' },
+      { anchor: 'Liberty Law', href: '/' },
+      { anchor: 'contact us', href: '/contact/' },
+      { anchor: '(630) 449-4800', href: 'tel:6304494800' },
+      { anchor: 'Contact Us', href: '/contact/' },
+    ],
+  }), []);
+});
+
+// The generators rewrite ’ as ', – as -, and … as ... . That is typography, not
+// lost content, and it must not fail the preservation gate.
+test('preservation tolerates typographic punctuation swaps', () => {
+  const requirements = buildPreservationRequirements(
+    '<h1>What to Do if You’re Arrested</h1><h2>Fees – What to Expect</h2>'
+    + '<p><a href="/contact/">Let’s talk</a></p>'
+  );
+  equal(preservationIssues(
+    "<h1>What to Do if You're Arrested</h1><h2>Fees - What to Expect</h2>"
+    + '<p><a href="/contact/">Let\'s talk</a></p>',
+    requirements
+  ), []);
+});
+
+test('preservation still rejects genuinely different heading text', () => {
+  const requirements = buildPreservationRequirements('<h1>What to Do if You’re Arrested</h1>');
+  equal(preservationIssues('<h1>What to Do After an Arrest</h1>', requirements).length, 1);
 });
 
 test('review preamble lists the exact original content that must survive', () => {

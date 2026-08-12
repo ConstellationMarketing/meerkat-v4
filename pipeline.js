@@ -365,7 +365,8 @@ function deduplicateLinks(html) {
 }
 
 // Post-processing: strip phone numbers from article body
-function stripPhoneNumbers(html) {
+function stripPhoneNumbers(html, editMode = false) {
+  if (editMode) return html;
   // Match common US phone formats, ordered from most specific to least
   return html.replace(/<p>([\s\S]*?)<\/p>/gi, (match, content) => {
     const cleaned = content
@@ -592,6 +593,26 @@ function capH3Density(html) {
   return result;
 }
 
+// The deterministic post-processing chain. Runs after every LLM pass that can
+// reintroduce structural problems (review, repair, compliance), so all three
+// call sites stay identical and stay testable as one unit.
+function postProcess(html, { clientName, lockKw, website, isEditMode } = {}) {
+  let out = enforceSingleH1(html);
+  out = stripPlaceholders(out, clientName);
+  out = stripLinksFromHeadings(out);
+  out = fixMalformedH3(out);
+  out = lockH1ToKeyword(out, lockKw);
+  out = enforceTaglineLength(out);
+  out = stripForbiddenWords(out);
+  out = applyDestructiveLinkTransforms(out, website, isEditMode);
+  out = truncateFAQAnswers(out);
+  out = splitLongParagraphs(out);
+  if (!isEditMode) out = enforceAnchorTextLength(out);
+  out = deduplicatePhrases(out);
+  out = stripPhoneNumbers(out, isEditMode);
+  return capH3Density(out);
+}
+
 // Word count targets by template for quality gating
 const TEMPLATE_WORD_TARGETS = {
   'Practice Page': 2007,
@@ -650,6 +671,18 @@ function qualityGate(content, sections, template, wordCount, formatWarnings = []
   }
 
   return { pass: true, issues };
+}
+
+// Edit-mode only: name the stage that drops a protected heading or link, so a
+// preservation failure points at the pass that caused it instead of just the
+// quality gate that caught it.
+function trackPreservation(stage, html, preservation, seen = []) {
+  if (!preservation) return seen;
+  const issues = preservationIssues(html, preservation);
+  const lost = issues.filter(issue => !seen.includes(issue));
+  if (lost.length) console.warn(`[Preserve] ${stage} dropped: ${lost.join(' | ')}`);
+  else console.log(`[Preserve] ${stage}: ${issues.length} outstanding`);
+  return issues;
 }
 
 function recommendationLines(recs) {
@@ -860,8 +893,10 @@ async function runPipeline(payload) {
   htmlContent = stripForbiddenWords(htmlContent);
   htmlContent = truncateFAQAnswers(htmlContent);
   htmlContent = splitLongParagraphs(htmlContent);
-  htmlContent = stripPhoneNumbers(htmlContent);
+  htmlContent = stripPhoneNumbers(htmlContent, isEditMode);
   htmlContent = capH3Density(htmlContent);
+  const preservation = payload.optimization?.preservation || null;
+  let preserveSeen = trackPreservation('section generation', htmlContent, preservation);
 
   // ─── 3. Parallel: external links + internal links + title/meta ─────────────
   console.log('[Pipeline] Running link enrichment and title/meta in parallel...');
@@ -922,8 +957,9 @@ async function runPipeline(payload) {
   linkedHTML = applyDestructiveLinkTransforms(linkedHTML, website, isEditMode);
   if (!isEditMode) linkedHTML = enforceAnchorTextLength(linkedHTML);
   linkedHTML = deduplicatePhrases(linkedHTML);
-  linkedHTML = stripPhoneNumbers(linkedHTML);
+  linkedHTML = stripPhoneNumbers(linkedHTML, isEditMode);
   linkedHTML = capH3Density(linkedHTML);
+  preserveSeen = trackPreservation('link enrichment', linkedHTML, preservation, preserveSeen);
 
   // ─── 5. Build full content with SEO header ─────────────────────────────────
   let titleMeta = { titleTag: '', description: '' };
@@ -959,20 +995,7 @@ async function runPipeline(payload) {
       if (reviewResult.fixed_article) {
         fullContent = sanitizeReviewedHTML(reviewResult.fixed_article);
         // Re-run post-processing after review fixes (review may reintroduce issues)
-        fullContent = enforceSingleH1(fullContent);
-        fullContent = stripPlaceholders(fullContent, clientName);
-        fullContent = stripLinksFromHeadings(fullContent);
-        fullContent = fixMalformedH3(fullContent);
-        fullContent = lockH1ToKeyword(fullContent, lockKw);
-        fullContent = enforceTaglineLength(fullContent);
-        fullContent = stripForbiddenWords(fullContent);
-        fullContent = applyDestructiveLinkTransforms(fullContent, website, isEditMode);
-        fullContent = truncateFAQAnswers(fullContent);
-        fullContent = splitLongParagraphs(fullContent);
-        if (!isEditMode) fullContent = enforceAnchorTextLength(fullContent);
-        fullContent = deduplicatePhrases(fullContent);
-        fullContent = stripPhoneNumbers(fullContent);
-        fullContent = capH3Density(fullContent);
+        fullContent = postProcess(fullContent, { clientName, lockKw, website, isEditMode });
         console.log('[Pipeline] Applied structural fixes from review');
       }
     } else {
@@ -982,6 +1005,7 @@ async function runPipeline(payload) {
     console.error('Article review failed:', e.message);
     // Non-fatal — continue with original content
   }
+  preserveSeen = trackPreservation('structural review', fullContent, preservation, preserveSeen);
 
   // ─── 5c. Targeted structural repair ────────────────────────────────────
   // Every repair in this pass enforces new-article template shape (intro
@@ -1004,20 +1028,7 @@ async function runPipeline(payload) {
       console.log(`[Pipeline] Structural repairs applied (${repairResult.repairs.length}):`);
       repairResult.repairs.forEach(r => console.log(`  ✓ ${r}`));
       // Re-run deterministic post-processing after repairs
-      fullContent = enforceSingleH1(fullContent);
-      fullContent = stripPlaceholders(fullContent, clientName);
-      fullContent = stripLinksFromHeadings(fullContent);
-      fullContent = fixMalformedH3(fullContent);
-      fullContent = lockH1ToKeyword(fullContent, lockKw);
-      fullContent = enforceTaglineLength(fullContent);
-      fullContent = stripForbiddenWords(fullContent);
-      fullContent = applyDestructiveLinkTransforms(fullContent, website, isEditMode);
-      fullContent = truncateFAQAnswers(fullContent);
-      fullContent = splitLongParagraphs(fullContent);
-      if (!isEditMode) fullContent = enforceAnchorTextLength(fullContent);
-      fullContent = deduplicatePhrases(fullContent);
-      fullContent = stripPhoneNumbers(fullContent);
-      fullContent = capH3Density(fullContent);
+      fullContent = postProcess(fullContent, { clientName, lockKw, website, isEditMode });
     } else {
       console.log('[Pipeline] No structural repairs needed');
     }
@@ -1042,20 +1053,8 @@ async function runPipeline(payload) {
 
   let { htmlContent: cleanedContent } = applyCompliance(fullContent, complianceResult);
   // Re-run post-processing after compliance fixes
-  cleanedContent = enforceSingleH1(cleanedContent);
-  cleanedContent = stripPlaceholders(cleanedContent, clientName);
-  cleanedContent = stripLinksFromHeadings(cleanedContent);
-  cleanedContent = fixMalformedH3(cleanedContent);
-  cleanedContent = lockH1ToKeyword(cleanedContent, lockKw);
-  cleanedContent = enforceTaglineLength(cleanedContent);
-  cleanedContent = stripForbiddenWords(cleanedContent);
-  cleanedContent = applyDestructiveLinkTransforms(cleanedContent, website, isEditMode);
-  cleanedContent = truncateFAQAnswers(cleanedContent);
-  cleanedContent = splitLongParagraphs(cleanedContent);
-  if (!isEditMode) cleanedContent = enforceAnchorTextLength(cleanedContent);
-  cleanedContent = deduplicatePhrases(cleanedContent);
-  cleanedContent = stripPhoneNumbers(cleanedContent);
-  cleanedContent = capH3Density(cleanedContent);
+  cleanedContent = postProcess(cleanedContent, { clientName, lockKw, website, isEditMode });
+  preserveSeen = trackPreservation('legal compliance', cleanedContent, preservation, preserveSeen);
 
   // ─── 6b. Validate external links and statute citations ────────────────────
   const externalLinkCount = countExternalLinks(cleanedContent);
@@ -1295,5 +1294,6 @@ async function runPipeline(payload) {
 
 module.exports = {
   runPipeline, enforceTaglineLength, preservationReviewPreamble, qualityGate,
-  shouldPublishExternally, applyDestructiveLinkTransforms, buildReviewPrompts,
+  shouldPublishExternally, applyDestructiveLinkTransforms, buildReviewPrompts, stripPhoneNumbers,
+  postProcess,
 };
