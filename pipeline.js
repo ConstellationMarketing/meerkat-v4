@@ -15,6 +15,7 @@ const { checkAndFixFormat } = require('./lib/format-checker');
 const { checkCrossArticleDuplicates, getPriorClientPhrases } = require('./lib/cross-article-dupe-check');
 const { repairStructuralIssues } = require('./lib/structural-repair');
 
+const MODEL = require('./lib/model');
 const client = new Anthropic();
 
 // Load prompts at startup
@@ -41,7 +42,7 @@ function parsePrompt(template, vars) {
 }
 
 // Call Claude and return text output
-async function callClaude(systemPrompt, userPrompt, model = 'claude-haiku-4-5-20251001') {
+async function callClaude(systemPrompt, userPrompt, model = MODEL) {
   const MAX_API_RETRIES = 3;
   const BASE_DELAY_MS = 5000;
 
@@ -858,7 +859,7 @@ async function generateSection(payload, section) {
       userMsg += `\n\nPrevious output needs revision: ${issues.join(' ')}`;
     }
 
-    const output = await callClaude(system, userMsg, 'claude-sonnet-4-6');
+    const output = await callClaude(system, userMsg, MODEL);
     const { rawScore, wordCount: outputWords } = scoreArticle(output);
     lastOutput = output;
     lastScore = rawScore;
@@ -972,12 +973,12 @@ async function runPipeline(payload) {
   const [externalLinksRaw, internalLinksRaw, titleMetaRaw] = await Promise.all([
     callClaude(
       ...Object.values(parsePrompt(prompts['external-links'], { htmlContent })),
-      'claude-haiku-4-5-20251001'
+      MODEL
     ).catch(err => { console.error('External links failed:', err.message); return '[]'; }),
 
     callClaude(
       ...Object.values(parsePrompt(prompts['internal-links'], { htmlContent, internalUrls })),
-      'claude-haiku-4-5-20251001'
+      MODEL
     ).catch(err => { console.error('Internal links failed:', err.message); return '[]'; }),
 
     (() => {
@@ -989,7 +990,7 @@ async function runPipeline(payload) {
         ? 'The live page being optimized failed these SEO checks. Resolve every one that concerns the title tag or meta description:\n'
           + recommendationLines(recs) + '\n\n' + p.user
         : p.user;
-      return callClaude(p.system, user, 'claude-haiku-4-5-20251001');
+      return callClaude(p.system, user, MODEL);
     })().catch(err => { console.error('Title/meta failed:', err.message); return '{"titleTag":"","description":""}'; })
   ]);
 
@@ -1005,7 +1006,7 @@ async function runPipeline(payload) {
     try {
       const retryRaw = await callClaude(
         ...Object.values(parsePrompt(prompts['external-links'], { htmlContent })),
-        'claude-sonnet-4-6'
+        MODEL
       );
       const retryLinks = parseJSON(retryRaw);
       if (Array.isArray(retryLinks) && retryLinks.length > 0) {
@@ -1051,7 +1052,7 @@ async function runPipeline(payload) {
     // enforce template section rules against sections the page already has
     // (the attlaw dry run deleted the firm's own "How We Can Help" section).
     const hardenedReview = buildReviewPrompts(reviewPrompt, isEditMode, payload.optimization?.preservation);
-    const reviewRaw = await callClaude(hardenedReview.system, hardenedReview.user, 'claude-sonnet-4-6');
+    const reviewRaw = await callClaude(hardenedReview.system, hardenedReview.user, MODEL);
     reviewResult = parseJSON(reviewRaw);
 
     if (reviewResult.issues && reviewResult.issues.length > 0) {
@@ -1111,7 +1112,7 @@ async function runPipeline(payload) {
   try {
     const complianceRaw = await callClaude(
       ...Object.values(parsePrompt(prompts['legal-compliance'], { htmlContent: fullContent })),
-      'claude-sonnet-4-6'
+      MODEL
     );
     complianceResult = parseJSON(complianceRaw);
   } catch (e) {
@@ -1141,7 +1142,7 @@ async function runPipeline(payload) {
       const statuteCheckRaw = await callClaude(
         'You are a legal citation verifier. Check every statute citation in this article (anything with § or "Section" followed by numbers, or state code references). For each citation, determine if it appears to be a real, correctly cited statute for the jurisdiction. Return ONLY a JSON array of objects with: {"citation": "the exact citation", "status": "valid" or "suspicious", "reason": "brief explanation"}. If all citations look valid, return an empty array []. No prose, no code fences.',
         `Verify the statute citations in this article about "${keyword}":\n\n${cleanedContent}`,
-        'claude-sonnet-4-6'
+        MODEL
       );
 
       try {
@@ -1208,12 +1209,12 @@ async function runPipeline(payload) {
   const [schemaRaw, slugRaw] = await Promise.all([
     callClaude(
       ...Object.values(parsePrompt(prompts['schema-generator'], { htmlContent: cleanedContent })),
-      'claude-haiku-4-5-20251001'
+      MODEL
     ).catch(err => { console.error('Schema failed:', err.message); return ''; }),
 
     callClaude(
       ...Object.values(parsePrompt(prompts['slug-url'], { website, content: cleanedContent })),
-      'claude-haiku-4-5-20251001'
+      MODEL
     ).catch(err => { console.error('Slug failed:', err.message); return '{"articleTitle":"","urlSlug":"","pageUrl":""}'; })
   ]);
 
