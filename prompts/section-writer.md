@@ -62,6 +62,7 @@ This article is a **{{template}}** page. Follow the page-type-specific rules bel
 - FAQ sections must not exceed 25% of the total article word count
 - FAQ must contain a maximum of 5 questions
 - Every FAQ question must be derived from topics already covered in the article body — introduce no new subjects
+- Number each FAQ question sequentially (1., 2., 3., …) so the FAQ reads as a clean, scannable list.
 - FAQ answers must be concise — 2 sentences maximum per answer. Never exceed 2 sentences. Each answer should be roughly 2 lines of text.
 ## Required Section Template
 Every article must include ALL of the following sections in this order:
@@ -204,7 +205,7 @@ If your assigned section's brief overlaps with another section's brief (e.g., bo
 - **Practice pages** MUST include "Why Choose Us" as a dedicated section.
 
 ## CTA — Page-Type-Specific Rules
-- **Practice pages**: Direct CTA with a dedicated heading. Clear ask, brief explanation of legal support. May be assertive and conversion-oriented. The CTA MUST link to the contact page ({{website}}/contact), NOT the homepage. Include a "Next Steps" sub-section with 2-3 actionable bullet points (e.g., "Visit {{website}}/contact to get started," "Call to schedule a free consultation").
+- **Practice pages**: Direct CTA with a dedicated heading. Clear ask, brief explanation of legal support. May be assertive and conversion-oriented. The CTA MUST link to the contact page ({{website}}/contact), NOT the homepage. End with a brief, direct next step written in prose (e.g., "Contact us to schedule a consultation"). Do NOT use bullet-point lists in the CTA, and do NOT restate the intro or body — the CTA only summarizes and prompts the next step.
 - **Supporting/resource pages**: Short soft CTA only. 2–4 sentences maximum (50–80 words). No guarantees, no aggressive language. Suggest seeking legal guidance without a hard sell. Use phrasing like "speak with an attorney" — NOT "hire us today" or "call now for a free consultation." Keep it brief and non-promotional. Do NOT use a CTA heading like "Take Action Now" or "Speak With a Lawyer Today" — keep the tone educational and suggestive. The CTA MUST link to the contact page (not the homepage). For supporting pages, do NOT mention the firm by name in any body section — firm references belong only in the CTA.
 
 ## Local Signals
@@ -214,7 +215,7 @@ Content must feel rooted in the client's real-world location. Every article must
 - **CTA**: Include a local signal (e.g., "Contact our Atlanta criminal defense attorney" not just "Contact our attorney")
 - Integrate local signals naturally throughout headers, body paragraphs, FAQ answers, and CTAs — do not cluster them in one place
 - Use city, county, region, local courts, and state-specific legal context as appropriate (in plain language, not statute numbers)
-- Do NOT stuff or force local references — they must read naturally and serve the content
+- Do NOT stuff, force, or over-repeat local references. One city/state signal in the intro (first 100 words) and one in the CTA is enough — do NOT repeat the location in every section or force it where it does not fit.
 
 ## Paragraph Length
 - Every paragraph must be **2-3 sentences maximum**
@@ -273,6 +274,7 @@ The most important information must appear **immediately** — readers should no
 ## Output Formatting Rules
 - Output clean markdown only — no HTML tags
 - Do NOT use horizontal rules (--- or ***) anywhere in the output
+- Do NOT use em dashes (—) or en dashes (–) anywhere. Use commas, periods, or parentheses instead.
 - Do NOT use markdown thematic breaks to separate sections — use headings instead
 - Each section should have one H2 heading at the top, optionally followed by H3 sub-headings
 - Keep list items tightly grouped with no blank lines between them
