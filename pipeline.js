@@ -536,6 +536,16 @@ function applyDestructiveLinkTransforms(html, website, editMode) {
   return fixCTALinks(stripDirectoryLinks(deduplicateLinks(html)), website);
 }
 
+// Post-processing: normalize em/en dashes (editors flag them; Sonnet overuses
+// them). Numeric ranges -> hyphens; every other dash -> comma. Always runs.
+function normalizeDashes(html) {
+  if (!html) return html;
+  return html
+    .replace(/(\d)\s*[\u2014\u2013]\s*(\d)/g, '$1-$2')
+    .replace(/(\S)\s*[\u2014\u2013]\s*/g, '$1, ')
+    .replace(/, ,/g, ',');
+}
+
 // Post-processing: strip internal links with anchor text under 3 words (too generic)
 function enforceAnchorTextLength(html) {
   return html.replace(/<a\s+([^>]*href="([^"]*)"[^>]*)>([\s\S]*?)<\/a>/gi, (match, attrs, url, text) => {
@@ -1122,6 +1132,7 @@ async function runPipeline(payload) {
   let { htmlContent: cleanedContent } = applyCompliance(fullContent, complianceResult);
   // Re-run post-processing after compliance fixes
   cleanedContent = postProcess(cleanedContent, { clientName, lockKw, website, isEditMode });
+  cleanedContent = normalizeDashes(cleanedContent);
   preserveSeen = trackPreservation('legal compliance', cleanedContent, preservation, preserveSeen);
 
   // ─── 6b. Validate external links and statute citations ────────────────────
