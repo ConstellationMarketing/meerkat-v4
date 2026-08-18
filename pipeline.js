@@ -1198,6 +1198,14 @@ async function runPipeline(payload) {
     formatResult.warnings.push('REQUIRED: No jurisdiction-specific statute citations — pipeline repair failed, editor must add at least one');
   }
 
+  // Superlative in the keyword — ABA advertising rules flag superlatives
+  // ("best", "top-rated", "#1", etc.). We do NOT rewrite client-supplied
+  // keywords; we surface a warning so an editor reviews before publishing.
+  const superlativeMatch = (keyword || '').match(/\b(best|top[- ]?rated|top|number one|greatest|finest|leading|most trusted|premier|world[- ]?class|unbeatable|unrivaled)\b|#\s*1\b|\bno\.?\s*1\b/i);
+  if (superlativeMatch) {
+    formatResult.warnings.push(`REVIEW: Keyword contains a superlative ("${superlativeMatch[0]}") — ABA advertising rules flag superlatives (e.g., "best lawyers"). Left as-is per the client keyword; verify it complies before publishing.`);
+  }
+
   // Cross-article duplicate check (gated by CROSS_ARTICLE_DUPE_CHECK env var,
   // default off). Surfaces verbatim/near-verbatim sentences shared with recent
   // articles for the same client — the May 2026 Dostart/Sabbeth pattern.
