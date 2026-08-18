@@ -119,6 +119,7 @@ The "What to Expect" section must cover the legal process step by step. Include:
 - Varied phrasing of the same idea still counts as repetition and must be avoided
 - **Introduction**: Write exactly ONE intro paragraph block. Do not repeat or restate the opening paragraph. Never write the intro twice with different wording.
 - Do NOT repeat the same verb+pronoun pattern (e.g., "We fight," "We work," "We handle") more than twice in any section. Vary sentence openings — use the client's name, "Our team," "Your case," or lead with the action instead of "We."
+- Do NOT lean on a single descriptive stand-in phrase to refer to the firm or the article's subject. When the primary keyword is awkward to repeat (e.g., a superlative like "best lawyers in town"), do NOT invent one filler phrase (e.g., "the dedicated legal team in the area") and repeat it throughout — that reads as keyword stuffing. Vary references naturally: use the firm's name, "our attorneys," "the team," "our office," or rephrase the sentence. Never repeat the same 4-or-more-word descriptive phrase more than twice in a single section.
 
 ### Section-Boundary Rules — Each Section Has Its Own Job
 Sections must build on each other. The boundaries below tell you what each section is for and what it must NOT do — write only the slice this section owns.
