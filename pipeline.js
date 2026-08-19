@@ -42,7 +42,7 @@ function parsePrompt(template, vars) {
 }
 
 // Call Claude and return text output
-async function callClaude(systemPrompt, userPrompt, model = MODEL) {
+async function callClaude(systemPrompt, userPrompt, model = MODEL, maxTokens = 4096) {
   const MAX_API_RETRIES = 3;
   const BASE_DELAY_MS = 5000;
 
@@ -57,7 +57,7 @@ async function callClaude(systemPrompt, userPrompt, model = MODEL) {
       // rendered system prompt is what gets cached as-is.
       const msg = await client.messages.create({
         model,
-        max_tokens: 4096,
+        max_tokens: maxTokens,
         system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
         messages: [{ role: 'user', content: userPrompt }]
       });
@@ -131,6 +131,35 @@ function parseJSON(raw) {
 
   if (endIdx === -1) throw new Error('parseJSON: unbalanced brackets/braces');
   return JSON.parse(cleaned.slice(0, endIdx + 1));
+}
+
+// Parse the article-review output. The reviewer returns its issue list and the
+// corrected article between plain-text markers instead of one big escaped-JSON
+// blob — this avoids the JSON-escaping / max_tokens truncation failures that
+// were silently discarding the whole structural review. Falls back to the old
+// {"issues":[...],"fixed_article":"..."} JSON shape for safety.
+function parseReviewOutput(raw) {
+  const text = String(raw || '');
+  const FA = '<<<FIXED_ARTICLE>>>';
+  const faIdx = text.indexOf(FA);
+  if (faIdx !== -1) {
+    const ISU = '<<<ISSUES>>>';
+    const isuIdx = text.indexOf(ISU);
+    const issuesRaw = isuIdx !== -1 ? text.slice(isuIdx + ISU.length, faIdx) : text.slice(0, faIdx);
+    let issues = [];
+    try { const j = parseJSON(issuesRaw); if (Array.isArray(j)) issues = j; } catch (e) { issues = []; }
+    let fixed = text.slice(faIdx + FA.length);
+    const endIdx = fixed.indexOf('<<<END>>>');
+    if (endIdx !== -1) fixed = fixed.slice(0, endIdx);
+    fixed = fixed.replace(/```html\s*/gi, '').replace(/```/g, '').trim();
+    return { issues, fixed_article: fixed };
+  }
+  try {
+    const obj = parseJSON(text);
+    return { issues: Array.isArray(obj.issues) ? obj.issues : [], fixed_article: obj.fixed_article || '' };
+  } catch (e) {
+    return { issues: [], fixed_article: '' };
+  }
 }
 
 // Post-processing: enforce single H1 — strip all but the first, or promote first H2
@@ -1062,8 +1091,8 @@ async function runPipeline(payload) {
     // enforce template section rules against sections the page already has
     // (the attlaw dry run deleted the firm's own "How We Can Help" section).
     const hardenedReview = buildReviewPrompts(reviewPrompt, isEditMode, payload.optimization?.preservation);
-    const reviewRaw = await callClaude(hardenedReview.system, hardenedReview.user, MODEL);
-    reviewResult = parseJSON(reviewRaw);
+    const reviewRaw = await callClaude(hardenedReview.system, hardenedReview.user, MODEL, 16384);
+    reviewResult = parseReviewOutput(reviewRaw);
 
     if (reviewResult.issues && reviewResult.issues.length > 0) {
       console.log(`[Pipeline] Review found ${reviewResult.issues.length} issue(s):`);
@@ -1071,10 +1100,18 @@ async function runPipeline(payload) {
         console.log(`  - [${issue.type}] ${issue.description}`);
       });
       if (reviewResult.fixed_article) {
-        const reviewed = postProcess(sanitizeReviewedHTML(reviewResult.fixed_article),
-          { clientName, lockKw, website, isEditMode });
-        fullContent = keepBestPreserved(fullContent, reviewed, preservation, 'structural review');
-        if (fullContent === reviewed) console.log('[Pipeline] Applied structural fixes from review');
+        const candidate = reviewResult.fixed_article.trim();
+        const origClosed = /<\/article>\s*$/i.test(fullContent.trim());
+        const truncated = candidate.length < fullContent.length * 0.5 ||
+          (origClosed && !/<\/article>\s*$/i.test(candidate));
+        if (truncated) {
+          console.warn('[Pipeline] Review output looks truncated/incomplete — keeping pre-review content');
+        } else {
+          const reviewed = postProcess(sanitizeReviewedHTML(candidate),
+            { clientName, lockKw, website, isEditMode });
+          fullContent = keepBestPreserved(fullContent, reviewed, preservation, 'structural review');
+          if (fullContent === reviewed) console.log('[Pipeline] Applied structural fixes from review');
+        }
       }
     } else {
       console.log('[Pipeline] Review passed — no structural issues found');
