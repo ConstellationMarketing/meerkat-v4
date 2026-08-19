@@ -1206,6 +1206,14 @@ async function runPipeline(payload) {
     formatResult.warnings.push(`REVIEW: Keyword contains a superlative ("${superlativeMatch[0]}") — ABA advertising rules flag superlatives (e.g., "best lawyers"). Left as-is per the client keyword; verify it complies before publishing.`);
   }
 
+  // Specific dollar figures — the model can state wrong/outdated amounts.
+  // We do NOT remove them; we warn so an editor verifies each figure.
+  const dollarFigures = (cleanedContent.match(/\$\s?\d[\d,]*(?:\.\d+)?/g) || []);
+  if (dollarFigures.length > 0) {
+    const uniqFigures = [...new Set(dollarFigures.map(d => d.replace(/\s/g, '')))].slice(0, 8);
+    formatResult.warnings.push(`REVIEW: Article cites specific dollar figure(s) (${uniqFigures.join(', ')}) — verify each is current and correct for the jurisdiction before publishing.`);
+  }
+
   // Cross-article duplicate check (gated by CROSS_ARTICLE_DUPE_CHECK env var,
   // default off). Surfaces verbatim/near-verbatim sentences shared with recent
   // articles for the same client — the May 2026 Dostart/Sabbeth pattern.
