@@ -23,13 +23,14 @@ Background Information: {{clientInfo}}
 
 ## IF THIS IS SECTION 1 — the page opening
 - Keep the H1 exactly as it appears in the current content, including its wording and punctuation, as a markdown # heading.
-- If the opening has a tagline (a short standalone phrase), you may retune it to speak to the page's whole audience; keep it 7 words or fewer and bold: **tagline**
-- Make sure 2-4 sentences of introduction follow, telling the reader what the page covers and why it matters to them. No conversion language ("call now", "free consultation") in the opening.
+- If the opening already has a tagline (a short standalone phrase), you may retune it to speak to the page's whole audience; keep it 7 words or fewer and bold: **tagline**.
+- If the opening already has an introduction, keep roughly the same number of sentences and improve it in place. If the current opening has no tagline or introduction, do not add either one.
+- No conversion language ("call now", "free consultation") in the opening.
 
 ## OUTPUT
 - Before returning, scan your draft: if any sentence still uses "always", "never", "must", "cannot", "will", or "guarantees" to describe a legal outcome or protection, revise that sentence first.
 - Clean markdown only — no HTML tags, no horizontal rules, no code fences, and no commentary about what you changed.
-- Section 1 starts with the # H1; every other section starts with its ## heading.
+- Section 1 starts with the # H1; every other section starts with the exact ## or ### heading marker shown in CURRENT CONTENT.
 - Preserve every existing markdown link from CURRENT CONTENT exactly, including its visible anchor text and URL. Do not fabricate any new link or URL; a separate pass inserts additional links.
 - A link that sits alone on its own line is a button on the live page. Keep it, on its own line, exactly as written, even though it reads like promotional copy.
 - Every bold marker (**) must have a matching closing marker on the same line.
