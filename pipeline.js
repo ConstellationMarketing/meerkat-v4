@@ -819,11 +819,11 @@ function optimizationPreamble(opt, { includeBefore = true } = {}) {
     + (opt.guidance ? `Editor guidance: ${opt.guidance}\n` : '')
     + recs;
   if (includeBefore) {
-    // Compose-mode sections (template fallback, or CTA/FAQ additions in edit
-    // mode) see the whole page so what they write fits it.
+    // A fallback compose sees the whole page, but it still preserves the source
+    // page's section inventory rather than appending template sections.
     out += 'Current page content (plain text, may be truncated):\n---\n' + opt.beforeText + '\n---\n'
       + 'Preserve what already works (accurate facts, existing service descriptions, tone that matches the firm). '
-      + 'Fix what is thin: expand shallow sections, add the FAQ if missing, strengthen local specificity, keep the same page purpose.';
+      + 'Fix what is thin inside the existing sections, strengthen local specificity, keep the same page purpose, and do not add, remove, merge, rename, or reorder sections.';
   } else {
     // Edit-mode sections carry their own full original text; the audit
     // findings above are page-wide, so scope them.

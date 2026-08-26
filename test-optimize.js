@@ -19,6 +19,8 @@ const { applyCompliance } = require('./lib/apply-compliance');
 let passed = 0;
 let failed = 0;
 
+const optimizeSectionPrompt = fs.readFileSync(path.join(__dirname, 'prompts', 'optimize-section.md'), 'utf8');
+
 function test(name, fn) {
   try {
     fn();
@@ -35,6 +37,12 @@ function equal(actual, expected) {
   const e = JSON.stringify(expected);
   if (a !== e) throw new Error(`expected ${e}, got ${a}`);
 }
+
+test('optimization prompt preserves absent openings and original heading levels', () => {
+  equal(optimizeSectionPrompt.includes('If the current opening has no tagline or introduction, do not add either one.'), true);
+  equal(optimizeSectionPrompt.includes('Make sure 2-4 sentences of introduction follow'), false);
+  equal(optimizeSectionPrompt.includes('starts with the exact ## or ### heading marker shown in CURRENT CONTENT'), true);
+});
 
 test('parseChangeReport parses good sentinels', () => {
   equal(parseChangeReport('<<<BULLETS>>>\nExpanded the intro\nAdded an FAQ\n<<<END_BULLETS>>>'), {
@@ -136,6 +144,27 @@ test('extractPageSections starts intro after the H1, excluding breadcrumbs', () 
   equal(parsed.intro.text, 'Intro sentence one about intestacy. Intro sentence two.');
 });
 
+test('extractPageSections preserves substantive H3 sections and their levels', () => {
+  const html = '<h1>THE CLUB</h1>'
+    + '<h3>The Name</h3><p>Majestic Soccer Club began with international and domestic players in Atlanta more than four decades ago.</p>'
+    + '<h3>The Foundation</h3><p>The team rebuilt around a small core and steadily added stronger players over several seasons.</p>'
+    + '<h2>Our Accomplishments</h2><p>The club earned league and cup honors across multiple decades of competitive play.</p>';
+  const parsed = extractPageSections(html);
+  equal(parsed.sections.map(section => [section.level, section.heading]), [
+    [3, 'The Name'],
+    [3, 'The Foundation'],
+    [2, 'Our Accomplishments'],
+  ]);
+});
+
+test('buildEditSections keeps an H1-only opening instead of inventing an introduction', () => {
+  const parsed = extractPageSections('<h1>THE CLUB</h1><h3>The Name</h3><p>This section has enough original body copy to count as page content today.</p>');
+  const [opening, section] = buildEditSections(parsed, []);
+  equal(opening.wordCount, 1);
+  equal(opening.details.includes('Do not add'), true);
+  equal(section.originalText.startsWith('### The Name'), true);
+});
+
 test('extractPageSections detects FAQ and CTA headings', () => {
   const html = '<h1>T</h1><p>i</p>'
     + '<h2>Frequently Asked Questions</h2><p>Answers to the questions readers ask us most often about this legal topic.</p>'
@@ -152,28 +181,23 @@ test('extractPageSections flags a trailing prose CTA without a CTA heading', () 
   equal(extractPageSections(html).hasCta, true);
 });
 
-test('buildEditSections maps parsed sections to numbered edit jobs sized to the original', () => {
+test('buildEditSections maps only original sections to numbered edit jobs', () => {
   const parsed = extractPageSections(PAGE);
   const jobs = buildEditSections(parsed, []);
-  equal(jobs.map(j => j.mode), ['edit', 'edit', 'edit', 'add', 'add']);
-  equal(jobs.map(j => j.sectionNumber), [1, 2, 3, 4, 5]);
+  equal(jobs.map(j => j.mode), ['edit', 'edit', 'edit']);
+  equal(jobs.map(j => j.sectionNumber), [1, 2, 3]);
   equal(jobs[0].originalText.startsWith('# What Happens Without an Estate Plan'), true);
   equal(jobs[1].originalText.startsWith('## How the State Handles It'), true);
-  equal(jobs[3].name, 'CTA');
-  equal(jobs[4].name, 'FAQ');
 });
 
-test('buildEditSections reuses the house template briefs for added CTA/FAQ', () => {
+test('buildEditSections never appends house CTA or FAQ sections to an optimization', () => {
   const parsed = extractPageSections(PAGE);
   const jobs = buildEditSections(parsed, [
     { name: 'CTA', details: 'House CTA brief', wordCount: 90 },
     { name: 'FAQ', details: 'House FAQ brief', wordCount: 300 },
   ]);
-  const cta = jobs.find(j => j.name === 'CTA');
-  const faq = jobs.find(j => j.name === 'FAQ');
-  equal(cta.details, 'House CTA brief');
-  equal(faq.details, 'House FAQ brief');
-  equal(faq.wordCount, 300);
+  equal(jobs.some(job => job.mode === 'add'), false);
+  equal(jobs.some(job => job.name === 'CTA' || job.name === 'FAQ'), false);
 });
 
 test('buildEditSections skips CTA/FAQ jobs when the page already has them', () => {
@@ -298,6 +322,15 @@ test('preservation requirements exclude article metadata and sidebar chrome', ()
       { anchor: 'Contact Us', href: '/contact/' },
     ],
   });
+});
+
+test('preservation requirements protect original H3 headings', () => {
+  const source = '<main><h1>THE CLUB</h1><h3>The Name</h3><p>Original body.</p><h2>Alumni</h2><p>Members.</p></main>';
+  const requirements = buildPreservationRequirements(source);
+  equal(requirements.headings, ['THE CLUB', 'The Name', 'Alumni']);
+  equal(preservationIssues('<h1>THE CLUB</h1><h2>Alumni</h2><p>Members.</p>', requirements), [
+    'Missing original heading: The Name',
+  ]);
 });
 
 test('preservation requirements include links from short CTA sections', () => {
