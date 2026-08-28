@@ -14,7 +14,7 @@ IMPORTANT OUTPUT RULES:
 VIOLATION REPORTING RULES:
 - If you find violations, each item in "violations" must be an object with these four keys:
   - "term": the exact prohibited word or phrase found in the article
-  - "replacement": a recommended replacement phrase (use alternatives from the reference)
+  - "replacement": a recommended replacement phrase (use alternatives from the reference). The replacement is substituted VERBATIM into the published article, so it must always be reader-facing article copy. It must NEVER be an instruction, note, or recommendation to an editor — phrases like "verify or remove", "confirm the citation", "check this", "[internal note]" must never appear in "replacement". If the right fix is deletion, use "[REMOVE]".
   - "category": one of the defined categories (e.g., "Superlatives", "Outcome Promises", "Specialization", "Fees", "Presumption of Innocence", "Inclusive Language", "Overbroad Claims", "Legal Advice", "Professional Tone")
   - "excerpt": a short excerpt (up to 200 characters) from the article containing the term (trim whitespace)
 - "total" must be the integer count of violations found.
@@ -59,7 +59,7 @@ PROHIBITED TERMS & GUIDELINES:
   - A statute number that doesn't match the described legal concept
   - A state code citation used in the wrong jurisdiction context
   - A statute cited for a legal concept it doesn't actually govern
-  If a citation looks suspicious, flag it with category "Statute Accuracy" and recommend either verifying or removing the specific number while keeping the legal concept reference.
+  If a citation looks suspicious, flag it with category "Statute Accuracy". The "replacement" must be the same legal concept restated in plain reader-facing language WITHOUT the specific number (e.g., term "Mo. Rev. Stat. § 559.036" → replacement "Missouri's probation statute"). Never put an instruction such as "verify or remove the specific number" into "replacement" — that text would be published to the client's website verbatim.
 
 ADDITIONAL INSTRUCTIONS:
 - If no violations are found, return exactly: {"violations":[],"total":0,"categories":[]}
