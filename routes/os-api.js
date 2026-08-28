@@ -2,9 +2,8 @@
 
 const express = require('express');
 const crypto = require('crypto');
-const { getActiveBatch } = require('../lib/batch');
 const { enrichArticles } = require('../lib/enrich');
-const { startOptimizeBatch, createOptimizeJob } = require('../lib/optimize');
+const { enqueueBatch } = require('../lib/queue');
 const { queueTranslation } = require('../lib/translate-queue');
 
 const router = express.Router();
@@ -37,18 +36,18 @@ router.post('/optimize/start', async (req, res) => {
     return res.status(400).json({ error: `${invalid.length} item(s) missing keyword, url or clientName` });
   }
   try {
-    const active = await getActiveBatch();
-    if (active) {
-      return res.status(409).json({ error: `Batch "${active.batch_id}" is already processing`, activeBatchId: active.batch_id });
-    }
+    // The engine runs one batch at a time; a busy engine used to 409 here,
+    // which stranded the optimization half of every mixed OS launch. Now the
+    // batch enqueues and starts automatically in FIFO order (lib/queue.js).
     const enriched = await enrichArticles(items.map((i) => ({
       keyword: i.keyword, clientName: i.clientName, template: i.template || 'Practice Page',
     })));
     const merged = mergeOptimizeItems(items, enriched, userId);
     const batchId = `opt-${new Date().toISOString().slice(0, 10)}-${crypto.randomUUID().slice(0, 8)}`;
-    await createOptimizeJob(batchId, merged.length, userId || null);
-    res.status(202).json({ batchId, total: merged.length });
-    startOptimizeBatch(batchId, merged).catch((err) => console.error(`[OS-API] Optimize batch ${batchId} crashed:`, err));
+    const { ahead } = await enqueueBatch({
+      batchId, kind: 'optimize', payload: merged, total: merged.length, userId: userId || null,
+    });
+    res.status(202).json({ batchId, total: merged.length, queued: ahead > 0, ahead });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

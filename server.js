@@ -9,7 +9,8 @@ const { createClient } = require('@supabase/supabase-js');
 const { runPipeline } = require('./pipeline');
 const { runTranslation, getTranslationStatus } = require('./lib/translate');
 const { queueTranslation, startReconciler } = require('./lib/translate-queue');
-const { startBatch, cancelBatch, retryFailed, getBatchStatus, getActiveBatch, markOrphanedBatches } = require('./lib/batch');
+const { cancelBatch, retryFailed, getBatchStatus, markOrphanedBatches } = require('./lib/batch');
+const { enqueueBatch, pump } = require('./lib/queue');
 const { enrichArticles } = require('./lib/enrich');
 const frontendApi = require('./routes/frontend-api');
 
@@ -148,50 +149,36 @@ app.post('/batch/start', async (req, res) => {
   console.log(`\n[Server] POST /batch/start | batchId=${batchId} | articles=${articles.length}`);
 
   try {
-    // Active-batch lock: refuse to start a new batch while another is running.
     // The batch loop is sequential and runs in this same VPS process; a second
     // concurrent batch would share Anthropic rate limits, race on status
-    // updates, and confuse the UI. User must cancel the existing batch first.
-    const active = await getActiveBatch();
-    if (active) {
-      return res.status(409).json({
-        error: 'Another batch is already running. Cancel it before starting a new one.',
-        activeBatchId: active.batch_id,
-        progress: `${active.completed_count || 0}/${active.total_articles || 0}`,
-      });
-    }
-
+    // updates, and confuse the UI. So the engine still runs ONE batch at a
+    // time — but instead of refusing while busy (a clash once multiple editors
+    // launch work), the batch is enqueued and starts automatically in FIFO
+    // order. See lib/queue.js.
     const enrichedArticles = (await enrichArticles(articles)).map(article => ({
       ...article,
       userId: userId || null,
     }));
 
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY, { db: { schema: "meerkat" } });
-
-    // Create batch_jobs row
-    const { error: insertError } = await supabase.from('batch_jobs').insert({
-      batch_id: batchId,
-      created_by: userId || null,
-      total_articles: enrichedArticles.length,
-      csv_data: articles, // store original CSV data for retry
+    const { ahead } = await enqueueBatch({
+      batchId,
+      kind: 'generate',
+      payload: enrichedArticles,
+      total: enrichedArticles.length,
+      userId,
+      csvData: articles, // original CSV data kept for /batch/retry
     });
 
-    if (insertError) {
-      return res.status(500).json({ error: `Failed to create batch job: ${insertError.message}` });
-    }
-
-    // Respond immediately
     res.status(202).json({
       status: 'accepted',
       batchId,
       totalArticles: enrichedArticles.length,
-      message: 'Batch generation started. Poll /batch/status for progress.'
+      queued: ahead > 0,
+      ahead,
+      message: ahead > 0
+        ? `Queued behind ${ahead} batch${ahead === 1 ? '' : 'es'}. The engine runs one batch at a time and starts this one automatically.`
+        : 'Batch generation started. Poll /batch/status for progress.'
     });
-
-    // Fire batch processing in background
-    startBatch(batchId, enrichedArticles)
-      .then(() => console.log(`[Server] Batch "${batchId}" processing complete`))
-      .catch(err => console.error(`[Server] Batch "${batchId}" failed:`, err));
 
   } catch (err) {
     console.error('[Server] Batch start error:', err);
@@ -329,7 +316,8 @@ app.post('/batch/retry', async (req, res) => {
 
     retryFailed(batchId, enrichedArticles, requestedKeywords ? [...requestedKeywords] : null)
       .then(() => console.log(`[Server] Batch "${batchId}" retry complete`))
-      .catch(err => console.error(`[Server] Batch "${batchId}" retry failed:`, err));
+      .catch(err => console.error(`[Server] Batch "${batchId}" retry failed:`, err))
+      .finally(() => pump()); // a retry occupies the lane outside the queue — drain queued batches when it ends
 
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -370,7 +358,11 @@ app.listen(PORT, () => {
   // (deploy, crash, OOM) abandons in-flight batches in 'processing' status.
   // Mark them as 'orphaned' so the active-batch lock below can let new
   // batches proceed.
-  markOrphanedBatches().catch(err => console.error('[Batch] Orphan sweep error:', err));
+  markOrphanedBatches()
+    .catch(err => console.error('[Batch] Orphan sweep error:', err))
+    // Queued batches survive restarts (payload lives in queue_payload) — once
+    // the orphan sweep clears the lane, start the oldest queued batch.
+    .finally(() => pump());
 
   // Keep ES/VI translations in sync with article edits. Sweeps for missing,
   // stale, stuck, and failed translations. Disable with TRANSLATE_RECONCILER=0.
