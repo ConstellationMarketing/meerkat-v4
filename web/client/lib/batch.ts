@@ -27,7 +27,7 @@ export interface BatchStatus {
   batch_id: string;
   created_by: string | null;
   created_at: string;
-  status: "pending" | "processing" | "completed" | "failed" | "cancelled" | "orphaned";
+  status: "pending" | "queued" | "processing" | "completed" | "failed" | "cancelled" | "orphaned";
   total_articles: number;
   completed_count: number;
   failed_count: number;
