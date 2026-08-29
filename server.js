@@ -9,7 +9,7 @@ const { createClient } = require('@supabase/supabase-js');
 const { runPipeline } = require('./pipeline');
 const { runTranslation, getTranslationStatus } = require('./lib/translate');
 const { queueTranslation, startReconciler } = require('./lib/translate-queue');
-const { cancelBatch, retryFailed, getBatchStatus, markOrphanedBatches } = require('./lib/batch');
+const { cancelBatch, retryFailed, getBatchStatus, getActiveBatch, markOrphanedBatches } = require('./lib/batch');
 const { enqueueBatch, pump } = require('./lib/queue');
 const { enrichArticles } = require('./lib/enrich');
 const frontendApi = require('./routes/frontend-api');
@@ -306,6 +306,14 @@ app.post('/batch/retry', async (req, res) => {
       };
     });
 
+    // One lane: a retry must not run beside the queue's active batch. The
+    // atomic claim inside retryFailed is the backstop; this check exists so
+    // the caller hears "busy" instead of a 202 that silently does nothing.
+    const active = await getActiveBatch();
+    if (active && active.batch_id !== batchId) {
+      return res.status(409).json({ error: `The engine is busy with batch "${active.batch_id}" - retry when it finishes.` });
+    }
+
     res.status(202).json({
       status: 'retrying',
       batchId,
@@ -363,6 +371,11 @@ app.listen(PORT, () => {
     // Queued batches survive restarts (payload lives in queue_payload) — once
     // the orphan sweep clears the lane, start the oldest queued batch.
     .finally(() => pump());
+
+  // Safety net: pump() is normally event-driven (enqueue, retry completion,
+  // startup). If a transient DB error ever drops that chain, a queued batch
+  // would sit until the next event; this timer bounds the wait.
+  setInterval(() => pump(), 5 * 60 * 1000).unref();
 
   // Keep ES/VI translations in sync with article edits. Sweeps for missing,
   // stale, stuck, and failed translations. Disable with TRANSLATE_RECONCILER=0.
