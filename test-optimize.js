@@ -6,6 +6,7 @@ const {
   parseChangeReport, htmlToText, extractRecommendations,
   htmlToBlockText, extractPageSections, buildEditSections, minimumWordCount,
   buildPreservationRequirements, preservationIssues, failureRecord, missingSectionSource,
+  applyComplianceToPreservation, resolvePageUrl,
 } = require('./lib/optimize');
 const { mergeOptimizeItems } = require('./routes/os-api');
 process.env.ANTHROPIC_API_KEY ||= 'test-key';
@@ -700,6 +701,69 @@ test('review preamble lists the exact original content that must survive', () =>
   });
   equal(preamble.includes('Categories of Criminal Offenses'), true);
   equal(preamble.includes('misdemeanor -> /misdemeanor/'), true);
+});
+
+// Batch #22/#27 (2026-08-30): on non-Divi themes the whole-region requirement
+// scan demanded footer phones, sidebars, skip-links, and popup links no
+// article rewrite could contain, so those rows failed every relaunch.
+test('parsed-scoped preservation requirements exclude theme furniture', () => {
+  const source = '<div><a href="#content">Skip to content</a><a href="tel:(802) 457-1112">(802) 457-1112</a>'
+    + '<h1>Vermont Injury Guide</h1><p>An intro long enough to matter for the reader today, with context.</p>'
+    + '<h2>How Claims Work</h2><p>Read the <a href="/claims/">claims guide</a> for the process our attorneys follow in every Vermont case.</p>'
+    + '<h2>Practice Areas</h2><p>tiny</p>'
+    + '<div><a href="/"></a><a href="/schedule/">Schedule a Consultation</a></div></div>';
+  const requirements = buildPreservationRequirements(source, extractPageSections(source));
+  equal(requirements.headings, ['Vermont Injury Guide', 'How Claims Work']);
+  equal(requirements.links, [{ anchor: 'claims guide', href: '/claims/' }]);
+});
+
+test('compliance rewrites update preservation requirements instead of failing them', () => {
+  const preservation = {
+    headings: ['Over 45 Years of Proven Experience', 'How Claims Work'],
+    links: [{ anchor: 'proven track record of results', href: '/about/' }],
+  };
+  applyComplianceToPreservation(preservation, [
+    { original: '45 Years of Proven Experience', replacement: 'Decades of Criminal Defense Experience' },
+    { original: 'proven track record of results', replacement: '[REMOVED]' },
+  ]);
+  equal(preservation.headings, ['Over Decades of Criminal Defense Experience', 'How Claims Work']);
+  equal(preservation.links, []);
+});
+
+test('review output that fixes one protected item but drops another is discarded', () => {
+  const preservation = { headings: ['Heading A', 'Heading B'], links: [] };
+  const before = '<h2>Heading A</h2>';
+  const after = '<h2>Heading B</h2>';
+  equal(keepBestPreserved(before, after, preservation, 'structural review'), before);
+});
+
+test('a short linked CTA section becomes an edit job so the gate demand is producible', () => {
+  const html = '<h1>T</h1><p>Intro long enough to be treated as real page opening content here.</p>'
+    + '<h2>Body Section</h2><p>Long enough body text for this section to count as real page content today.</p>'
+    + '<h2>Contact Us</h2><p><a href="/contact/">Call Today</a></p>';
+  const parsed = extractPageSections(html);
+  equal(parsed.sections.map(s => s.heading), ['Body Section', 'Contact Us']);
+  const jobs = buildEditSections(parsed, []);
+  equal(jobs[jobs.length - 1].originalText.includes('[Call Today](/contact/)'), true);
+});
+
+test('htmlToBlockText keeps unquoted-href anchors as markdown links', () => {
+  equal(htmlToBlockText('<p>See <a href=/contact/>Call Today</a>.</p>'), 'See [Call Today](/contact/).');
+});
+
+test('htmlToBlockText percent-encodes spaces and parens so tel links round-trip', () => {
+  equal(
+    htmlToBlockText('<p>Call <a href="tel:(802) 457-1112">(802) 457-1112</a> now.</p>'),
+    'Call [(802) 457-1112](tel:%28802%29%20457-1112) now.'
+  );
+});
+
+test('resolvePageUrl absolutizes site-relative content-map URLs', () => {
+  equal(resolvePageUrl('/understanding-the-safe-t-act/', 'https://libertylawfirm.net'), 'https://libertylawfirm.net/understanding-the-safe-t-act/');
+  equal(resolvePageUrl('/page/', 'libertylawfirm.net'), 'https://libertylawfirm.net/page/');
+  equal(resolvePageUrl('https://a.com/x/', 'https://b.com'), 'https://a.com/x/');
+  equal(resolvePageUrl('/page/', ''), '/page/');
+  equal(resolvePageUrl('not-a-path', 'https://b.com'), 'not-a-path');
 });
 
 if (failed > 0) {

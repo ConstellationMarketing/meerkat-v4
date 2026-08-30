@@ -5,7 +5,7 @@ const path = require('path');
 const Anthropic = require('@anthropic-ai/sdk');
 const { compileArticle } = require('./lib/article-compiler');
 const { insertLinks } = require('./lib/insert-links');
-const { minimumWordCount, preservationIssues, missingSectionSource } = require('./lib/optimize');
+const { minimumWordCount, preservationIssues, missingSectionSource, applyComplianceToPreservation } = require('./lib/optimize');
 const { applyCompliance } = require('./lib/apply-compliance');
 const { replaceOutsideTags } = require('./lib/html-text');
 const { scoreArticle } = require('./lib/scoring');
@@ -776,9 +776,18 @@ function trackPreservation(stage, html, preservation, seen = []) {
 // that pass would have fixed, while its replacement fails the batch outright.
 function keepBestPreserved(before, after, preservation, stage) {
   if (!preservation) return after;
-  const lost = preservationIssues(after, preservation).length - preservationIssues(before, preservation).length;
-  if (lost <= 0) return after;
-  console.warn(`[Preserve] discarding ${stage} output — it dropped ${lost} protected item(s)`);
+  // Item-level, not a count: a rewrite that restores two protected headings
+  // while deleting one protected link used to win on net score and fail the
+  // gate anyway. A pass may fix issues but never introduce a new one.
+  const beforeIssues = preservationIssues(before, preservation);
+  const lost = preservationIssues(after, preservation).filter(issue => {
+    const index = beforeIssues.indexOf(issue);
+    if (index === -1) return true;
+    beforeIssues.splice(index, 1);
+    return false;
+  });
+  if (!lost.length) return after;
+  console.warn(`[Preserve] discarding ${stage} output — it dropped: ${lost.join(' | ')}`);
   return before;
 }
 
@@ -1166,10 +1175,15 @@ async function runPipeline(payload) {
     console.error('Compliance check failed:', e.message);
   }
 
-  let { htmlContent: cleanedContent } = applyCompliance(fullContent, complianceResult);
+  const complianceApplied = applyCompliance(fullContent, complianceResult);
+  let cleanedContent = complianceApplied.htmlContent;
   // Re-run post-processing after compliance fixes
   cleanedContent = postProcess(cleanedContent, { clientName, lockKw, website, isEditMode });
   cleanedContent = normalizeDashes(cleanedContent);
+  // Compliance deliberately rewords claims and statute text; when that touches
+  // a protected heading or anchor the requirement follows the rewrite instead
+  // of failing the article for a fix the pipeline itself made.
+  applyComplianceToPreservation(preservation, complianceApplied.changes);
   preserveSeen = trackPreservation('legal compliance', cleanedContent, preservation, preserveSeen);
 
   // ─── 6b. Validate external links and statute citations ────────────────────
