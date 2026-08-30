@@ -345,7 +345,7 @@ test('preservation requirements include links from short CTA sections', () => {
   ]);
 });
 
-test('preservation checks exact case and duplicate counts', () => {
+test('preservation counts duplicates but treats case restyling as kept', () => {
   const requirements = {
     headings: ['Criminal Offense', 'Criminal Offense'],
     links: [
@@ -353,14 +353,23 @@ test('preservation checks exact case and duplicate counts', () => {
       { anchor: 'Call Today', href: '/contact/' },
     ],
   };
+  // Both heading instances survive (one restyled), only one of two links does.
   equal(preservationIssues(
     '<h1>criminal offense</h1><h2>Criminal Offense</h2><a href="/contact/">call today</a>',
     requirements,
   ), [
-    'Missing original heading: Criminal Offense',
-    'Missing original link: Call Today (/contact/)',
     'Missing original link: Call Today (/contact/)',
   ]);
+});
+
+test('named entities in the source never become unmatchable requirements', () => {
+  const source = '<h1>Vermont Workers&rsquo; Compensation Lawyers</h1>'
+    + '<h2>How Claims Work</h2><p>Read about <a href="/blog/">workers&rsquo; compensation in Vermont</a> and the claims process our attorneys follow.</p>';
+  const requirements = buildPreservationRequirements(source, extractPageSections(source));
+  equal(preservationIssues(
+    "<h1>Vermont Workers' Compensation Lawyers</h1><h2>How Claims Work</h2><p><a href=\"/blog/\">workers' compensation in Vermont</a></p>",
+    requirements,
+  ), []);
 });
 
 test('preservation requirements reject missing original headings and links', () => {
