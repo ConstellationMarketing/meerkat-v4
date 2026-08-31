@@ -1357,21 +1357,24 @@ async function runPipeline(payload) {
     isEditMode,
     payload.optimization?.preservation,
   );
+  // The gate is ADVISORY: a flawed draft an editor can fix beats a failed row
+  // (editors review every draft in the OS now). Issues save onto the article as
+  // warnings instead of blocking it; only a real DB error fails the row.
   if (!qc.pass) {
-    console.error(`[Pipeline] ✗ QUALITY GATE FAILED for articleId=${articleId}:`);
-    qc.issues.forEach(i => console.error(`  - ${i}`));
-    console.error(`[Pipeline] Reason: ${qc.reason} — skipping Supabase upsert`);
-  } else {
-    if (qc.issues.length > 0) {
-      console.log(`[Pipeline] Quality gate passed with warnings:`);
-      qc.issues.forEach(i => console.log(`  ⚠ ${i}`));
-    }
+    console.warn(`[Pipeline] ⚠ Quality gate flagged articleId=${articleId} (${qc.reason}) — saving anyway for editor review:`);
+    qc.issues.forEach(i => console.warn(`  - ${i}`));
+    articleRecord.format_warnings = [
+      `QUALITY (${qc.reason}): saved despite gate — needs editor review`,
+      ...qc.issues.map(i => `QUALITY: ${i}`),
+      ...(articleRecord.format_warnings || []),
+    ];
+  } else if (qc.issues.length > 0) {
+    console.log(`[Pipeline] Quality gate passed with warnings:`);
+    qc.issues.forEach(i => console.log(`  ⚠ ${i}`));
   }
 
   let supabaseError = null;
-  if (!qc.pass) {
-    supabaseError = `Quality gate failed: ${qc.reason}`;
-  } else if (!skipPublish) {
+  if (!skipPublish) {
     try {
       await upsertArticle(articleRecord);
       console.log('[Pipeline] Supabase upsert success');
@@ -1386,7 +1389,7 @@ async function runPipeline(payload) {
   // ─── 10. Publish to internal.goconstellation.com ─────────────────────────
   // SKIP_PUBLISH_EXTERNAL suppresses external sends without blocking Supabase.
   let publishedUrl = null;
-  if (shouldPublishExternally({ skipPublish, skipExternal, qcPass: qc.pass, supabaseError })) {
+  if (shouldPublishExternally({ skipPublish, skipExternal, qcPass: true, supabaseError })) {
     try {
       publishedUrl = await publishArticle({
       articleId,
@@ -1409,8 +1412,7 @@ async function runPipeline(payload) {
   } else {
     // A blocked publish used to be reported as SKIP_PUBLISH=1 whatever the cause,
     // which sends whoever reads the log hunting an env flag that was never set.
-    const reason = qc.pass ? `Supabase upsert failed: ${supabaseError}` : `quality gate: ${qc.reason}`;
-    console.log(`[Pipeline] Skipping publish (${reason})`);
+    console.log(`[Pipeline] Skipping publish (Supabase upsert failed: ${supabaseError})`);
   }
 
   // ─── 11. Auto-translate to all languages ──────────────────────────────────
