@@ -759,6 +759,52 @@ function qualityGate(content, sections, template, wordCount, formatWarnings = []
   return { pass: true, issues };
 }
 
+// Gate reasons a fresh generation usually clears on its own. Every one of them
+// is a model miss on a single run (dropped protected content, un-paraphrased
+// scaffolding, a short or headless draft, sections that errored), not a defect
+// in the input, so handing the finding back to the writer and generating again
+// is the fix. Reasons outside this list are excluded deliberately: nothing here
+// depends on input the pipeline cannot change between attempts.
+const GATE_RETRY_REASONS = [
+  'missing-original-content',
+  'scaffold-text-leaked',
+  'below-word-count',
+  'majority-sections-failed',
+  'placeholder-content',
+  'missing-h1',
+];
+
+// Total generations allowed per article: the first, plus GATE_MAX_ATTEMPTS - 1
+// re-prompts. Set it to 1 to disable the re-prompt entirely.
+function gateMaxAttempts() {
+  const raw = parseInt(process.env.GATE_MAX_ATTEMPTS, 10);
+  if (Number.isFinite(raw) && raw >= 1) return raw;
+  return 3;
+}
+
+// What the writer is told about the attempt that just failed the gate. Concrete
+// on purpose: a section writer can only act on the specific heading, link, or
+// phrase that went missing, not on the name of a gate.
+function gateFeedbackBlock(feedback) {
+  if (!feedback || !feedback.reason) return '';
+  const issues = (feedback.issues || []).slice(0, 12).map(i => `- ${i}`).join('\n');
+  const guidance = {
+    'missing-original-content':
+      'The previous draft of this article deleted content the live page must keep. If any item below belongs in the section you are writing, reproduce it exactly, character for character, including a link that sits alone on its own line.',
+    'scaffold-text-leaked':
+      'The previous draft published brief or scaffold wording verbatim. Never copy a section name, a brief instruction, or a placeholder phrase into the body. Write a real heading and real sentences that carry the same idea.',
+    'below-word-count':
+      'The previous draft came in short. Write to the section word target with substantive detail specific to this client and jurisdiction. Do not pad with filler and do not restate a point you already made.',
+    'majority-sections-failed':
+      'Most sections of the previous draft failed to generate. Return complete, well formed HTML for this section.',
+    'placeholder-content':
+      'The previous draft contained placeholder text instead of real content. Return finished copy with no placeholders.',
+    'missing-h1':
+      'The previous draft had no H1. If this is the opening section it must start with a single H1.',
+  }[feedback.reason] || 'The previous draft of this article failed a quality check. Fix the findings below.';
+  return `\n\n## PREVIOUS ATTEMPT AT THIS ARTICLE WAS REJECTED (${feedback.reason})\n\n${guidance}\n\nFindings from the rejected draft:\n${issues || '- (no detail recorded)'}`;
+}
+
 // Edit-mode only: name the stage that drops a protected heading or link, so a
 // preservation failure points at the pass that caused it instead of just the
 // quality gate that caught it.
@@ -892,6 +938,9 @@ async function generateSection(payload, section) {
       ? optimizationPreamble(payload.optimization, { includeBefore: !editMode }) + '\n\n' + user
         + (editMode ? '' : priorPhrasesBlock)
       : user + priorPhrasesBlock;
+    // A re-prompt after an article-level gate failure: the finding travels into
+    // every section, because the gate only ever sees the compiled article.
+    userMsg += gateFeedbackBlock(payload.gateFeedback);
     if (attempt > 0) {
       const issues = [];
       if (lastScore !== null && lastScore < fleschMin) {
@@ -985,7 +1034,7 @@ async function runPipeline(payload) {
   console.log(`[Pipeline] Generating ${sections.length} sections in parallel...`);
   const sectionResults = await Promise.all(
     sections.map(section =>
-      generateSection({ articleId, clientId, clientName, clientInfo, website, keyword, template, priorPhrases, optimization: payload.optimization }, section)
+      generateSection({ articleId, clientId, clientName, clientInfo, website, keyword, template, priorPhrases, optimization: payload.optimization, gateFeedback: payload.gateFeedback }, section)
         .catch(err => {
           console.error(`Section ${section.sectionNumber} failed:`, err.message);
           return { output: `[Section ${section.sectionNumber} generation failed]`, fleschScore: 0, sectionNumber: section.sectionNumber };
@@ -1068,6 +1117,11 @@ async function runPipeline(payload) {
     }
   }
 
+  // A model that answers the link prompts with an object instead of an array
+  // used to take the whole generation down here ("externalLinks is not
+  // iterable"), turning a cosmetic miss into a failed row. Degrade to no links.
+  if (!Array.isArray(externalLinks)) { console.warn('[Pipeline] External links were not an array — continuing without them'); externalLinks = []; }
+  if (!Array.isArray(internalLinks)) { console.warn('[Pipeline] Internal links were not an array — continuing without them'); internalLinks = []; }
   const allLinks = [...externalLinks, ...internalLinks];
   let { htmlContent: linkedHTML } = insertLinks(htmlContent, allLinks);
   linkedHTML = applyDestructiveLinkTransforms(linkedHTML, website, isEditMode);
@@ -1357,6 +1411,35 @@ async function runPipeline(payload) {
     isEditMode,
     payload.optimization?.preservation,
   );
+  // Re-prompt before anyone is asked to look at it. A gate failure on this list
+  // is a bad roll of the model, and the editor's only recovery today is to
+  // requeue the row by hand, which is the same generation with none of the
+  // finding fed back. Do that here instead: hand the gate's own findings to the
+  // section writers and generate again, up to GATE_MAX_ATTEMPTS total. Nothing
+  // has been written to Supabase at this point, so a discarded attempt leaves
+  // no trace beyond the log line.
+  const gateAttempt = Number(payload._gateAttempt) || 1;
+  const maxGateAttempts = gateMaxAttempts();
+  if (!qc.pass && gateAttempt < maxGateAttempts && GATE_RETRY_REASONS.includes(qc.reason)) {
+    console.warn(`[Pipeline] ⚠ Quality gate failed articleId=${articleId} (${qc.reason}) on attempt ${gateAttempt}/${maxGateAttempts} — regenerating with the finding in the prompt:`);
+    qc.issues.forEach(i => console.warn(`  - ${i}`));
+    return runPipeline({
+      ...payload,
+      _gateAttempt: gateAttempt + 1,
+      gateFeedback: { reason: qc.reason, issues: qc.issues },
+    });
+  }
+
+  // The attempt count rides on the row so the ledger, the OS and the daily
+  // digest can all see that the system healed this article by itself.
+  const attemptWarnings = [];
+  if (gateAttempt > 1) {
+    const healedFrom = payload.gateFeedback && payload.gateFeedback.reason;
+    attemptWarnings.push(qc.pass
+      ? `QUALITY: regenerated ${gateAttempt} times to clear the ${healedFrom || 'quality'} gate — no editor action needed`
+      : `QUALITY: regenerated ${gateAttempt} times, gate still failing`);
+  }
+
   // The gate is ADVISORY: a flawed draft an editor can fix beats a failed row
   // (editors review every draft in the OS now). Issues save onto the article as
   // warnings instead of blocking it; only a real DB error fails the row.
@@ -1365,10 +1448,15 @@ async function runPipeline(payload) {
     qc.issues.forEach(i => console.warn(`  - ${i}`));
     articleRecord.format_warnings = [
       `QUALITY (${qc.reason}): saved despite gate — needs editor review`,
+      ...attemptWarnings,
       ...qc.issues.map(i => `QUALITY: ${i}`),
       ...(articleRecord.format_warnings || []),
     ];
-  } else if (qc.issues.length > 0) {
+  } else if (attemptWarnings.length) {
+    console.log(`[Pipeline] Quality gate cleared on attempt ${gateAttempt}`);
+    articleRecord.format_warnings = [...attemptWarnings, ...(articleRecord.format_warnings || [])];
+  }
+  if (qc.pass && qc.issues.length > 0) {
     console.log(`[Pipeline] Quality gate passed with warnings:`);
     qc.issues.forEach(i => console.log(`  ⚠ ${i}`));
   }
@@ -1434,6 +1522,8 @@ async function runPipeline(payload) {
   return {
     articleId,
     keyword,
+    attempts: gateAttempt,
+    gateReason: qc.pass ? null : qc.reason,
     wordCount: scores.wordCount,
     fleschScore: scores.fleschScore,
     pageUrl: slugData.pageUrl,
@@ -1449,4 +1539,5 @@ module.exports = {
   runPipeline, enforceTaglineLength, preservationReviewPreamble, qualityGate,
   shouldPublishExternally, applyDestructiveLinkTransforms, buildReviewPrompts, stripPhoneNumbers,
   postProcess, keepBestPreserved,
+  GATE_RETRY_REASONS, gateMaxAttempts, gateFeedbackBlock,
 };
