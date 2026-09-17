@@ -329,31 +329,71 @@ function enforceTaglineLength(html) {
   return html.replace(oldTag, '');
 }
 
-// Shared sentence splitter that handles legal abbreviations (U.S., D.U.I., etc.)
-function splitSentences(text) {
-  // Protect common abbreviations from being treated as sentence endings
-  const protected_ = text
-    .replace(/\bU\.S\./g, 'U\x00S\x00')
-    .replace(/\bD\.U\.I\./g, 'D\x00U\x00I\x00')
-    .replace(/\bD\.W\.I\./g, 'D\x00W\x00I\x00')
-    .replace(/\bD\.C\./g, 'D\x00C\x00')
-    .replace(/\bN\.J\./g, 'N\x00J\x00')
-    .replace(/\bN\.Y\./g, 'N\x00Y\x00')
-    .replace(/\bv\./g, 'v\x00')
-    .replace(/\bvs\./g, 'vs\x00')
-    .replace(/\bDr\./g, 'Dr\x00')
-    .replace(/\bMr\./g, 'Mr\x00')
-    .replace(/\bMrs\./g, 'Mrs\x00')
-    .replace(/\bSt\./g, 'St\x00')
-    .replace(/\bJr\./g, 'Jr\x00')
-    .replace(/\bSr\./g, 'Sr\x00')
-    .replace(/\be\.g\./g, 'e\x00g\x00')
-    .replace(/\bi\.e\./g, 'i\x00e\x00')
-    .replace(/§\s*[\d.-]+/g, m => m.replace(/\./g, '\x00'));
+// A sentence ends at . ! or ? (plus any closing quote, bracket or closing tag)
+// followed by whitespace or the end of the text. A period inside a token
+// ("O.C.G.A.", "14-2-1.5", "x.com") is never an end.
+const SENTENCE_TERMINATOR = /[.!?]+["'”’)\]]*(?:<\/[a-zA-Z][\w-]*>)*(?=\s|$)/g;
+// These end in a period but do not end a sentence, whatever follows.
+const TITLE_ABBREVIATION = /(?:^|[^\w.])(?:Dr|Mr|Mrs|Ms|St|Jr|Sr|vs?)\.$/;
+// Dotted initialisms: U.S., D.U.I., O.C.G.A., U.S.C., e.g., i.e., a.m.
+const DOTTED_INITIALISM = /(?:^|[^\w.])(?:[A-Za-z]\.){2,}$/;
+// Statute and court citation abbreviations. After one of these the sentence
+// only goes on when the next word carries the citation on ("Ga. Code Ann.
+// § 14-2-1", "Fla. Stat. 95.11", "No. 5"); "based in Atlanta, Ga. We" still ends.
+const CITATION_ABBREVIATION = /(?:^|[^\w.])(?:Ala|Ariz|Ark|Cal|Colo|Conn|Del|Fla|Ga|Ill|Ind|Kan|Ky|La|Mass|Md|Mich|Minn|Miss|Mo|Mont|Neb|Nev|Okla|Ore|Pa|Tenn|Tex|Va|Vt|Wash|Wis|Wyo|Ann|Stat|Rev|Gen|Comp|Admin|Reg|Regs|Sec|Art|Ch|Const|Civ|Crim|Proc|Evid|Fam|Bus|Prof|Prob|Pen|Gov|Ins|Lab|Supp|Cir|App|Ct|Dist|Fed|No|Nos|Pub|Pt|Tit|Vol)\.$/;
+const CITATION_CONTINUES = /^(?:[A-Z][a-z]{0,5}\.|(?:Code|Laws?|Rules?)\b|\d)/;
+// A sentence never opens on these, so the period before them is an
+// abbreviation: "et seq., and", "Inc. is", "O.C.G.A. § 14-2-1".
+const OPENS_MID_SENTENCE = /^[a-z§,;:]/;
 
-  const sentences = protected_.match(/[^.!?]*[.!?]+/g);
-  if (!sentences) return null;
-  return sentences.map(s => s.replace(/\x00/g, '.'));
+// End offsets of every sentence in `source`. With { html: true } tags are
+// skipped when reading the words around a terminator, and a sentence never
+// ends inside an attribute or inside an element that is still open, so every
+// piece cut at these offsets is balanced markup.
+function sentenceEnds(source, { html = false } = {}) {
+  const visible = s => (html ? s.replace(/<[^>]*>/g, '') : s);
+  const ends = [];
+  for (const m of source.matchAll(SENTENCE_TERMINATOR)) {
+    const end = m.index + m[0].length;
+    if (html && source.lastIndexOf('<', m.index) > source.lastIndexOf('>', m.index)) continue;
+    const next = visible(source.slice(end)).trimStart();
+    if (next) {
+      if (OPENS_MID_SENTENCE.test(next)) continue;
+      const lead = visible(source.slice(0, end)).replace(/["'”’)\]]+$/, '');
+      if (lead.endsWith('.')) {
+        if (TITLE_ABBREVIATION.test(lead) || DOTTED_INITIALISM.test(lead)) continue;
+        if (CITATION_ABBREVIATION.test(lead) && CITATION_CONTINUES.test(next)) continue;
+      }
+    }
+    if (html && !tagsBalanced(source.slice(0, end))) continue;
+    ends.push(end);
+  }
+  return ends;
+}
+
+function cutAt(source, ends) {
+  const pieces = [];
+  let start = 0;
+  for (const end of ends) {
+    pieces.push(source.slice(start, end));
+    start = end;
+  }
+  if (source.slice(start).trim()) pieces.push(source.slice(start));
+  return pieces;
+}
+
+// Shared sentence splitter that handles legal abbreviations and citations
+// (U.S., D.U.I., O.C.G.A. § 14-2-1 et seq., Ga. Code Ann.). Pieces keep their
+// leading whitespace so joining them with '' rebuilds the text; trailing text
+// without a terminator is kept as the last piece. null when nothing ends.
+function splitSentences(text) {
+  const ends = sentenceEnds(text);
+  return ends.length ? cutAt(text, ends) : null;
+}
+
+// The same split on a paragraph's inner HTML, so links and bold survive.
+function splitHtmlSentences(html) {
+  return cutAt(html, sentenceEnds(html, { html: true })).map(p => p.trim()).filter(Boolean);
 }
 
 // Post-processing: replace forbidden words with safe alternatives
@@ -484,9 +524,8 @@ function truncateFAQAnswers(html, editMode = false) {
       // Answers carrying inline markup are truncated on the HTML itself, so the
       // sentences we keep keep their links and bold instead of going flat.
       if (/<[^/][^>]*>/.test(answerContent)) {
-        // The naive split also fires on abbreviations ("Dr. Smith"), so grow the
-        // kept HTML until its plain text holds two real sentences.
-        const pieces = answerContent.split(/(?<=[.!?])\s+(?=[A-Z<])/);
+        // Grow the kept HTML until its plain text holds two real sentences.
+        const pieces = splitHtmlSentences(answerContent);
         let kept = '';
         for (const piece of pieces) {
           kept = kept ? `${kept} ${piece}` : piece;
@@ -522,9 +561,9 @@ function splitLongParagraphs(html) {
     // content and split on sentence boundaries within the HTML
     const hasInlineHtml = /<[^/][^>]*>/.test(content);
     if (hasInlineHtml) {
-      // Split the raw HTML content on sentence-ending punctuation followed by whitespace
-      // This preserves inline tags within each sentence
-      const htmlSentences = content.split(/(?<=[.!?])\s+(?=[A-Z<])/);
+      // Split the raw HTML on the same sentence ends, so inline tags stay
+      // inside the sentence that holds them
+      const htmlSentences = splitHtmlSentences(content);
       if (htmlSentences.length <= 3) return match;
       const paragraphs = [];
       for (let i = 0; i < htmlSentences.length; i += 3) {
@@ -1536,7 +1575,7 @@ async function runPipeline(payload) {
 }
 
 module.exports = {
-  runPipeline, enforceTaglineLength, preservationReviewPreamble, qualityGate,
+  runPipeline, enforceTaglineLength, splitSentences, preservationReviewPreamble, qualityGate,
   shouldPublishExternally, applyDestructiveLinkTransforms, buildReviewPrompts, stripPhoneNumbers,
   postProcess, keepBestPreserved,
   GATE_RETRY_REASONS, gateMaxAttempts, gateFeedbackBlock,
