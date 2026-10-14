@@ -10,7 +10,6 @@ const { applyCompliance } = require('./lib/apply-compliance');
 const { replaceOutsideTags } = require('./lib/html-text');
 const { scoreArticle } = require('./lib/scoring');
 const { upsertArticle } = require('./lib/supabase');
-const { publishArticle } = require('./lib/github-publish');
 const { checkAndFixFormat } = require('./lib/format-checker');
 const { checkCrossArticleDuplicates, getPriorClientPhrases } = require('./lib/cross-article-dupe-check');
 const { repairStructuralIssues } = require('./lib/structural-repair');
@@ -880,10 +879,6 @@ function recommendationLines(recs) {
   return (recs || []).map(r => `- [${(r.checks || []).join(', ')}] ${r.fix}`).join('\n');
 }
 
-function shouldPublishExternally({ skipPublish, skipExternal, qcPass, supabaseError }) {
-  return !skipPublish && !skipExternal && qcPass && !supabaseError;
-}
-
 function preservationReviewPreamble(preservation) {
   if (!preservation) return '';
   const headings = (preservation.headings || []).map(heading => `- ${heading}`).join('\n');
@@ -1399,7 +1394,6 @@ async function runPipeline(payload) {
 
   // ─── 9. Upsert to Supabase ────────────────────────────────────────────────
   const skipPublish = process.env.SKIP_PUBLISH === '1';
-  const skipExternal = process.env.SKIP_PUBLISH_EXTERNAL === '1';
   if (skipPublish) {
     console.log('[Pipeline] SKIP_PUBLISH=1 — writing HTML to test-output/ instead');
     const outputDir = path.join(__dirname, 'test-output');
@@ -1513,35 +1507,6 @@ async function runPipeline(payload) {
     console.log('[Pipeline] Skipping Supabase upsert (SKIP_PUBLISH=1)');
   }
 
-  // ─── 10. Publish to internal.goconstellation.com ─────────────────────────
-  // SKIP_PUBLISH_EXTERNAL suppresses external sends without blocking Supabase.
-  let publishedUrl = null;
-  if (shouldPublishExternally({ skipPublish, skipExternal, qcPass: true, supabaseError })) {
-    try {
-      publishedUrl = await publishArticle({
-      articleId,
-      clientName,
-      keyword,
-      slug: slugData.urlSlug || articleId,
-      htmlContent: cleanedContent,
-      fleschScore: scores.fleschScore,
-      wordCount: scores.wordCount,
-      pageUrl: slugData.pageUrl,
-      userId
-    });
-    } catch (err) {
-      console.error('[Pipeline] Publish failed:', err.message);
-    }
-  } else if (skipExternal && !skipPublish) {
-    console.log('[Pipeline] Skipping internal.goconstellation publish (SKIP_PUBLISH_EXTERNAL=1)');
-  } else if (skipPublish) {
-    console.log('[Pipeline] Skipping publish (SKIP_PUBLISH=1)');
-  } else {
-    // A blocked publish used to be reported as SKIP_PUBLISH=1 whatever the cause,
-    // which sends whoever reads the log hunting an env flag that was never set.
-    console.log(`[Pipeline] Skipping publish (Supabase upsert failed: ${supabaseError})`);
-  }
-
   // ─── 11. Auto-translate to all languages ──────────────────────────────────
   // Queue ES + VI so translations are ready without an editor clicking
   // "Translate". Goes through the shared translate queue (debounced,
@@ -1568,7 +1533,6 @@ async function runPipeline(payload) {
     pageUrl: slugData.pageUrl,
     urlSlug: slugData.urlSlug,
     supabaseError,
-    publishedUrl,
     table: process.env.SUPABASE_TABLE || 'article_outlines',
     articleRecord,
   };
@@ -1576,7 +1540,7 @@ async function runPipeline(payload) {
 
 module.exports = {
   runPipeline, enforceTaglineLength, splitSentences, preservationReviewPreamble, qualityGate,
-  shouldPublishExternally, applyDestructiveLinkTransforms, buildReviewPrompts, stripPhoneNumbers,
+  applyDestructiveLinkTransforms, buildReviewPrompts, stripPhoneNumbers,
   postProcess, keepBestPreserved,
   GATE_RETRY_REASONS, gateMaxAttempts, gateFeedbackBlock,
 };

@@ -60,7 +60,6 @@ Module._load = function (request, parent, isMain) {
   if (request === './lib/supabase') {
     return { upsertArticle: async () => ({}), getArticle: async () => null };
   }
-  if (request === './lib/github-publish') return { publishArticle: async () => null };
   return realLoad.apply(this, arguments);
 };
 
