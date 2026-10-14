@@ -81,7 +81,6 @@ meerkat-service/
 │   ├── scoring.js
 │   ├── insert-links.js
 │   ├── drive-upload.js
-│   ├── github-publish.js
 │   ├── translate.js
 │   └── supabase.js
 └── package.json
@@ -91,7 +90,7 @@ meerkat-service/
 
 ## Environment Variables (names only)
 
-`ANTHROPIC_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GITHUB_TOKEN`
+`ANTHROPIC_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`
 
 ---
 

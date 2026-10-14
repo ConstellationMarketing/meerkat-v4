@@ -11,7 +11,7 @@ const {
 const { mergeOptimizeItems } = require('./routes/os-api');
 process.env.ANTHROPIC_API_KEY ||= 'test-key';
 const {
-  preservationReviewPreamble, qualityGate, shouldPublishExternally, applyDestructiveLinkTransforms,
+  preservationReviewPreamble, qualityGate, applyDestructiveLinkTransforms,
   buildReviewPrompts, stripPhoneNumbers, postProcess, keepBestPreserved,
 } = require('./pipeline');
 const { compileArticle, convertToHTML } = require('./lib/article-compiler');
@@ -397,14 +397,6 @@ test('edit mode skips destructive link transforms', () => {
   equal(changed.includes('Duplicate Home Link</a>'), false);
   equal(changed.includes('Directory Link</a>'), false);
   equal(changed.includes('href="https://firm.com/contact"'), true);
-});
-
-test('external publish requires a passed quality gate and successful Supabase upsert', () => {
-  equal(shouldPublishExternally({ skipPublish: false, skipExternal: false, qcPass: true, supabaseError: null }), true);
-  equal(shouldPublishExternally({ skipPublish: false, skipExternal: false, qcPass: false, supabaseError: 'Quality gate failed' }), false);
-  equal(shouldPublishExternally({ skipPublish: false, skipExternal: false, qcPass: true, supabaseError: 'Supabase failed' }), false);
-  equal(shouldPublishExternally({ skipPublish: true, skipExternal: false, qcPass: true, supabaseError: null }), false);
-  equal(shouldPublishExternally({ skipPublish: false, skipExternal: true, qcPass: true, supabaseError: null }), false);
 });
 
 test('quality gate blocks edit output that drops preserved content', () => {

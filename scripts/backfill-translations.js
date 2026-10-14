@@ -16,8 +16,8 @@
  *
  * Notes:
  *   - Runs sequentially to avoid hammering the model API.
- *   - runTranslation also publishes the translation to GitHub if GITHUB_TOKEN
- *     is set (same behavior as the in-app Translate button).
+ *   - Translations are saved to Supabase only (the GitHub preview publish was
+ *     retired 2026-10-14).
  */
 
 require('dotenv').config();

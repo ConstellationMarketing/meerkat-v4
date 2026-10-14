@@ -10,7 +10,7 @@ type: reference
 **Timezone:** UTC
 **Port:** 3000
 
-**Env vars:** `/root/meerkat-service/.env` — contains ANTHROPIC_API_KEY, SUPABASE_URL, SUPABASE_KEY, SUPABASE_TABLE=article_outlines, GITHUB_TOKEN (for publishing to ConstellationMarketing/internal), GMAIL_USER, GMAIL_APP_PASSWORD, REPORT_RECIPIENTS
+**Env vars:** `/root/meerkat-service/.env` — contains ANTHROPIC_API_KEY, SUPABASE_URL, SUPABASE_KEY, SUPABASE_TABLE=article_outlines, GMAIL_USER, GMAIL_APP_PASSWORD, REPORT_RECIPIENTS
 
 **Other services on VPS:** claude-web, spr0, super-audit
 

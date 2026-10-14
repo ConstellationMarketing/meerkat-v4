@@ -6,8 +6,7 @@
  * against `cleaned content` (immutable pipeline draft) instead of
  * `received_article.content` (editor's final version). After PR #49
  * lands and deploys, run this once to redo every existing translation
- * against the correct source. The translator's existing publishTranslation
- * flow handles GitHub re-publish automatically.
+ * against the correct source.
  *
  * Usage:
  *   node scripts/retranslate-existing.js                # dry run — list what would run
