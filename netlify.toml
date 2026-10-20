@@ -1,0 +1,23 @@
+# Netlify config for the meerkatv3.netlify.app deploy.
+#
+# This repo (meerkatv4) is what Netlify actually builds — confirmed via the
+# Netlify Deploys panel showing "Deploys from github.com/ConstellationMarketing/meerkatv4".
+# Adds a redirect so the OS Health Check Bot can probe /health and reach a
+# Netlify Function returning canonical health JSON.
+#
+# (The Express server's /health route in server.js is unreachable from the
+# Netlify deploy — Netlify doesn't run Node servers, only static + Functions.)
+
+[build]
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# Force /health to the dedicated Netlify Function before any SPA / static
+# fallback catches it.
+[[redirects]]
+  force = true
+  from = "/health"
+  status = 200
+  to = "/.netlify/functions/health"
