@@ -1,3 +1,4 @@
+import { apiUrl } from "@/lib/base";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
@@ -182,7 +183,7 @@ function sendAutosaveTelemetry(
   } = {},
 ): void {
   try {
-    fetch("/.netlify/functions/autosave-telemetry", {
+    fetch(apiUrl("/.netlify/functions/autosave-telemetry"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1339,7 +1340,7 @@ ${htmlBody}
         updatedAt: new Date().toISOString(),
       };
 
-      const response = await fetch("/.netlify/functions/update-article", {
+      const response = await fetch(apiUrl("/.netlify/functions/update-article"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

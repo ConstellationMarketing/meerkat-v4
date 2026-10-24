@@ -1,3 +1,4 @@
+import { apiUrl } from "@/lib/base";
 import { useState, useEffect } from "react";
 import { ChevronDown, Clock, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,7 @@ export function RevisionHistory({
     setIsLoading(true);
     try {
       const response = await fetch(
-        `/.netlify/functions/get-article-revisions?article_id=${articleId}`,
+        apiUrl(`/.netlify/functions/get-article-revisions?article_id=${articleId}`),
       );
 
       if (!response.ok) {

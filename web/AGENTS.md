@@ -154,6 +154,18 @@ const data: MyRouteResponse = await response.json();
 - **Binary**: Self-contained executables (Linux, macOS, Windows)
 - **Cloud Deployment**: Use either Netlify or Vercel via their MCP integrations for easy deployment. Both providers work well with this starter template.
 
+## Classic Meerkat on the OS
+
+From `web/`, run `pnpm run build:os`, then
+`node scripts/export-to-os.mjs "<OS checkout path>"`.
+The export replaces the OS checkout's `meerkat/` directory with `dist/os/`.
+Commit that prebuilt folder in the OS repo along with any updated handler copies.
+The OS serves the SPA at `/meerkat/` and the copied Netlify handlers at
+`/meerkat-api/`. Public build settings live in `.env.os`; server credentials
+come from the OS environment, never the bundle. Changes to handlers or their
+shared dependencies must also be copied into `functions/_meerkat_classic/`.
+The normal `build:client` still produces `dist/spa/` for Netlify at `/`.
+
 ## Architecture Notes
 
 - Single-port development with Vite + Express integration

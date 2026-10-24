@@ -1,3 +1,4 @@
+import { API_BASE } from "@/lib/base";
 import { useState, useEffect, useRef } from "react";
 import { ArrowLeft, Users, FileText, Plus, Lock, ExternalLink, Download, Send, Upload, AlertTriangle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -59,7 +60,6 @@ function exportFeedbackToCsv(rows: EditingFeedbackData[]) {
     "Final Article URL",
     "Issues",
   ];
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
   const escape = (v: unknown) => {
     const s = v == null ? "" : String(v);
     if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
@@ -70,9 +70,9 @@ function exportFeedbackToCsv(rows: EditingFeedbackData[]) {
     const articleId =
       r.articleId || r.articleLink?.match(/\/editor\/([^/?]+)/)?.[1] || "";
     const originalUrl = articleId
-      ? `${origin}/share-article/${articleId}?original=true`
+      ? `${window.location.origin}${API_BASE}/share-article/${articleId}?original=true`
       : "";
-    const finalUrl = articleId ? `${origin}/share-article/${articleId}` : "";
+    const finalUrl = articleId ? `${window.location.origin}${API_BASE}/share-article/${articleId}` : "";
     const date = r.createdAt
       ? new Date(r.createdAt).toLocaleDateString()
       : "";
@@ -905,7 +905,7 @@ export default function AdminDashboard() {
                             <td className="px-4 py-3 text-sm whitespace-nowrap">
                               {articleId ? (
                                 <a
-                                  href={`/share-article/${articleId}?original=true`}
+                                  href={`${window.location.origin}${API_BASE}/share-article/${articleId}?original=true`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="text-primary hover:underline inline-flex items-center gap-1"
@@ -920,7 +920,7 @@ export default function AdminDashboard() {
                             <td className="px-4 py-3 text-sm whitespace-nowrap">
                               {articleId ? (
                                 <a
-                                  href={`/share-article/${articleId}`}
+                                  href={`${window.location.origin}${API_BASE}/share-article/${articleId}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="text-primary hover:underline inline-flex items-center gap-1"
