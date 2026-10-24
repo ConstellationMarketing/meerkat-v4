@@ -1,3 +1,4 @@
+import { apiUrl } from "@/lib/base";
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,7 @@ export default function PublicArticleView() {
       try {
         if (token) {
           // Verify token and get article_id and email
-          const response = await fetch(`/api/verify-token?token=${token}`);
+          const response = await fetch(apiUrl(`/api/verify-token?token=${token}`));
           if (!response.ok) {
             toast({
               title: "Error",
@@ -99,7 +100,7 @@ export default function PublicArticleView() {
 
         // Fetch access list for this article
         const response = await fetch(
-          `/api/article-access?articleId=${articleId}`,
+          apiUrl(`/api/article-access?articleId=${articleId}`),
         );
         if (response.ok) {
           const data = await response.json();

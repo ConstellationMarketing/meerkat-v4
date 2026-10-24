@@ -1,3 +1,4 @@
+import { appUrl } from "@/lib/base";
 import { useState, useEffect, useRef, useCallback, Fragment } from "react";
 import { Upload, Play, XCircle, RefreshCw, CheckCircle2, AlertCircle, Loader2, Plus, ChevronRight, ChevronDown, ExternalLink, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -687,7 +688,7 @@ export default function BatchGenerateTab({ userId }: { userId: string | null }) 
                                               <td className="p-2 text-muted-foreground">{a.word_count ?? "—"}</td>
                                               <td className="p-2">
                                                 <a
-                                                  href={`/editor/${a.article_id}`}
+                                                  href={appUrl(`/editor/${a.article_id}`)}
                                                   target="_blank"
                                                   rel="noopener noreferrer"
                                                   className="text-primary hover:underline inline-flex items-center gap-1 text-sm"

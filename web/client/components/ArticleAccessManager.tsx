@@ -1,3 +1,4 @@
+import { apiUrl, appUrl } from "@/lib/base";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,7 +45,7 @@ export function ArticleAccessManager({
   const [copiedTokenId, setCopiedTokenId] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const shareLink = `${window.location.origin}/article/${articleId}`;
+  const shareLink = appUrl(`/article/${articleId}`);
 
   const handleCopyLink = () => {
     try {
@@ -109,7 +110,7 @@ export function ArticleAccessManager({
   };
 
   const handleCopyTokenLink = (accessId: string, token: string) => {
-    const tokenLink = `${window.location.origin}/article/${articleId}?token=${token}`;
+    const tokenLink = appUrl(`/article/${articleId}?token=${token}`);
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard
@@ -181,7 +182,7 @@ export function ArticleAccessManager({
       }
       console.log(`[ArticleAccessManager] Fetching accesses for article: ${articleId}`);
       const response = await fetch(
-        `/api/article-access?articleId=${articleId}`,
+        apiUrl(`/api/article-access?articleId=${articleId}`),
       );
       if (!response.ok) throw new Error("Failed to fetch accesses");
       const data = await response.json();
@@ -233,7 +234,7 @@ export function ArticleAccessManager({
 
     try {
       console.log(`[ArticleAccessManager] Adding access for ${normalizedEmail} to article: ${articleId}`);
-      const response = await fetch("/api/article-access", {
+      const response = await fetch(apiUrl("/api/article-access"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -274,7 +275,7 @@ export function ArticleAccessManager({
     accessLevel: "view" | "comment" | "edit",
   ) => {
     try {
-      const response = await fetch("/api/article-access", {
+      const response = await fetch(apiUrl("/api/article-access"), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -304,7 +305,7 @@ export function ArticleAccessManager({
 
   const handleRemoveAccess = async (accessId: string) => {
     try {
-      const response = await fetch("/api/article-access", {
+      const response = await fetch(apiUrl("/api/article-access"), {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
@@ -454,7 +455,7 @@ export function ArticleAccessManager({
                       <div className="flex gap-2 items-center text-xs bg-white/50 p-2 rounded border border-border/50">
                         <input
                           type="text"
-                          value={`${window.location.origin}/article/${articleId}?token=${access.access_token}`}
+                          value={appUrl(`/article/${articleId}?token=${access.access_token}`)}
                           readOnly
                           className="flex-1 text-xs bg-transparent border-0 outline-none"
                         />

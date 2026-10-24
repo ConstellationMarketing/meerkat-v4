@@ -1,3 +1,4 @@
+import { apiUrl, appUrl } from "@/lib/base";
 import { supabase } from "@/lib/supabase";
 import { getArticleOutlines } from "@/lib/storage";
 
@@ -51,7 +52,7 @@ export async function getUneditedArticlesForUser(
       .map((article) => ({
         article_id: article.id,
         article_title: article.title || article.keyword || "Untitled",
-        article_link: `https://meerkatv3.netlify.app/editor/${article.id}`,
+        article_link: appUrl(`/editor/${article.id}`),
       }));
 
     return uneditedArticles;
@@ -67,7 +68,7 @@ export async function getUneditedArticlesForUser(
 export async function getAllUserUneditedArticles(): Promise<UserUneditedData[]> {
   try {
     // Get all team members
-    const response = await fetch("/api/team-members");
+    const response = await fetch(apiUrl("/api/team-members"));
     if (!response.ok) {
       throw new Error("Failed to fetch team members");
     }

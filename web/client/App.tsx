@@ -1,5 +1,6 @@
+import { APP_BASE } from "@/lib/base";
 import { useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -22,6 +23,7 @@ const queryClient = new QueryClient();
 
 function AuthContent() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -65,10 +67,10 @@ function AuthContent() {
   }, [isDevelopment]);
 
   // Determine if we're on a share/public route FIRST (before checking loading state)
-  const isShareRoute = window.location.pathname.startsWith("/share/");
+  const isShareRoute = location.pathname.startsWith("/share/");
   const isPublicArticleRoute =
-    window.location.pathname.startsWith("/share-article/") ||
-    window.location.pathname.startsWith("/article/");
+    location.pathname.startsWith("/share-article/") ||
+    location.pathname.startsWith("/article/");
 
   // Public routes that don't require authentication - serve immediately without waiting for auth
   if (isShareRoute || isPublicArticleRoute) {
@@ -157,7 +159,7 @@ function AuthContent() {
 
 export function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={APP_BASE.replace(/\/$/, "") || undefined}>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <Toaster />

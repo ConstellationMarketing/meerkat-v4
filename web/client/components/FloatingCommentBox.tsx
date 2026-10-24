@@ -1,3 +1,4 @@
+import { apiUrl } from "@/lib/base";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -106,7 +107,7 @@ export function FloatingCommentBox({
 
     setIsSubmitting(true);
     try {
-      const response = await fetch("/api/comments", {
+      const response = await fetch(apiUrl("/api/comments"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

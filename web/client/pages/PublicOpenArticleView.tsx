@@ -1,3 +1,4 @@
+import { apiUrl } from "@/lib/base";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { Pencil } from "lucide-react";
@@ -40,13 +41,13 @@ export default function PublicOpenArticleView() {
         if (searchParams.get("original") === "true") {
           // Load the originally generated article (from "cleaned content" column)
           response = await fetch(
-            `/.netlify/functions/get-article-original?id=${encodeURIComponent(articleId)}`
+            apiUrl(`/.netlify/functions/get-article-original?id=${encodeURIComponent(articleId)}`)
           );
           setIsRevisionView(true);
         } else {
           // Load current article (editor's version)
           response = await fetch(
-            `/.netlify/functions/get-article?id=${encodeURIComponent(articleId)}`
+            apiUrl(`/.netlify/functions/get-article?id=${encodeURIComponent(articleId)}`)
           );
         }
 

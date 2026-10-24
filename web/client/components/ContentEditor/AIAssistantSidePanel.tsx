@@ -1,3 +1,4 @@
+import { apiUrl } from "@/lib/base";
 import { useState, useRef, useEffect } from "react";
 import { MessageCircle, Send, X, Maximize2, Minimize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -50,7 +51,7 @@ export function AIAssistantSidePanel({
       // Calls the /api/chat Netlify function which proxies to OpenRouter
       // server-side (so the OPENROUTER_API_KEY never ships to the browser).
       // Replaces the dead n8n webhook this used to call.
-      const response = await fetch("/api/chat", {
+      const response = await fetch(apiUrl("/api/chat"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

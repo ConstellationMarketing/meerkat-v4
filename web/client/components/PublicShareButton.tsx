@@ -1,3 +1,4 @@
+import { API_BASE } from "@/lib/base";
 import { Share2, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,7 +22,7 @@ export function PublicShareButton({ articleId }: PublicShareButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { toast } = useToast();
 
-  const shareLink = `${window.location.origin}/share-article/${articleId}`;
+  const shareLink = `${window.location.origin}${API_BASE}/share-article/${articleId}`;
 
   const handleCopyLink = () => {
     try {
