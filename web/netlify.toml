@@ -10,85 +10,34 @@
 [functions]
   external_node_modules = ["express"]
   node_bundler = "esbuild"
-  
-# /health → Netlify Function for the OS Health Check Bot. Must sit above
-# the /* SPA fallback or the probe gets HTML instead of JSON.
+
+# Classic Meerkat now runs on the OS: the app at os.goconstellation.com/meerkat/
+# and its functions at /meerkat-api/ (OS PR #2461, ClickUp 86e3v306a). This site
+# only forwards. Rollback: revert this file to its previous redirects.
+
+# Machine callers (OS health bot, webhooks) keep working at the old address:
+# proxied, so POST bodies and responses pass through unchanged.
 [[redirects]]
   force = true
   from = "/health"
   status = 200
-  to = "/.netlify/functions/health"
-
-[[redirects]]
-  force = true
-  from = "/api/webhook*"
-  status = 200
-  to = "/.netlify/functions/webhook-handler"
-
-[[redirects]]
-  force = true
-  from = "/api/team-members"
-  status = 200
-  to = "/.netlify/functions/team-members"
-
-[[redirects]]
-  force = true
-  from = "/api/delete-user"
-  status = 200
-  to = "/.netlify/functions/delete-user"
-
-[[redirects]]
-  force = true
-  from = "/api/delete-user-cascade"
-  status = 200
-  to = "/.netlify/functions/delete-user-cascade"
-
-[[redirects]]
-  force = true
-  from = "/api/article-access"
-  status = 200
-  to = "/.netlify/functions/article-access"
-
-[[redirects]]
-  force = true
-  from = "/api/comments"
-  status = 200
-  to = "/.netlify/functions/comments"
-
-[[redirects]]
-  force = true
-  from = "/api/send-to-webhook"
-  status = 200
-  to = "/.netlify/functions/send-to-webhook"
-
-[[redirects]]
-  force = true
-  from = "/api/chat"
-  status = 200
-  to = "/.netlify/functions/chat"
+  to = "https://os.goconstellation.com/meerkat-api/health"
 
 [[redirects]]
   force = true
   from = "/api/*"
   status = 200
-  to = "/.netlify/functions/api/:splat"
+  to = "https://os.goconstellation.com/meerkat-api/api/:splat"
 
-# Server-rendered article view per language. Must sit above the /* SPA
-# fallback so `curl` on /share-article/:id[/:lang] gets translated HTML in
-# the initial response, not the React shell.
+# People land on the new address.
 [[redirects]]
   force = true
-  from = "/share-article/:articleId/:lang"
-  status = 200
-  to = "/.netlify/functions/share-article-ssr?id=:articleId&lang=:lang"
+  from = "/share-article/*"
+  status = 301
+  to = "https://os.goconstellation.com/meerkat-api/share-article/:splat"
 
 [[redirects]]
   force = true
-  from = "/share-article/:articleId"
-  status = 200
-  to = "/.netlify/functions/share-article-ssr?id=:articleId"
-
-[[redirects]]
   from = "/*"
-  to = "/index.html"
-  status = 200
+  status = 301
+  to = "https://os.goconstellation.com/meerkat/:splat"
