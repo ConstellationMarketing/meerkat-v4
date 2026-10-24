@@ -1,4 +1,3 @@
-import { apiUrl, appUrl } from "@/lib/base";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,7 +36,7 @@ export function PublicShareManager({
   const [copiedLink, setCopiedLink] = useState(false);
   const { toast } = useToast();
 
-  const shareLink = appUrl(`/share/${clientName}/${keyword}`);
+  const shareLink = `${window.location.origin}/share/${clientName}/${keyword}`;
 
   const handleCopyLink = () => {
     try {
@@ -105,7 +104,7 @@ export function PublicShareManager({
     try {
       setIsLoading(true);
       const response = await fetch(
-        apiUrl(`/api/public-shares?slug=${encodeURIComponent(articleSlug)}`),
+        `/api/public-shares?slug=${encodeURIComponent(articleSlug)}`,
       );
       if (!response.ok) throw new Error("Failed to fetch shares");
       const data = await response.json();
@@ -126,7 +125,7 @@ export function PublicShareManager({
     if (!newEmail.trim()) return;
 
     try {
-      const response = await fetch(apiUrl("/api/public-shares"), {
+      const response = await fetch("/api/public-shares", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -163,7 +162,7 @@ export function PublicShareManager({
 
   const handleRemoveShare = async (shareId: string) => {
     try {
-      const response = await fetch(apiUrl("/api/public-shares"), {
+      const response = await fetch("/api/public-shares", {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",

@@ -1,4 +1,3 @@
-import { apiUrl } from "@/lib/base";
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -31,7 +30,7 @@ export function EditableArticleContent({
 
   const handleSave = async () => {
     try {
-      const response = await fetch(apiUrl("/.netlify/functions/update-article"), {
+      const response = await fetch("/.netlify/functions/update-article", {
         method: "PATCH",
         body: JSON.stringify({
           articleId,

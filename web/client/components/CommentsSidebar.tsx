@@ -1,4 +1,3 @@
-import { apiUrl } from "@/lib/base";
 import { useState, useEffect } from "react"; // useEffect is already imported
 import { Button } from "@/components/ui/button";
 import { X, MessageCircle, Check } from "lucide-react";
@@ -53,7 +52,7 @@ export function CommentsSidebar({
   const fetchComments = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(apiUrl(`/api/comments?articleId=${articleId}`));
+      const response = await fetch(`/api/comments?articleId=${articleId}`);
       if (!response.ok) throw new Error("Failed to fetch comments");
       const data = await response.json();
       setComments(data || []);
@@ -71,7 +70,7 @@ export function CommentsSidebar({
 
   const handleResolveComment = async (commentId: string, resolved: boolean) => {
     try {
-      const response = await fetch(apiUrl("/api/comments"), {
+      const response = await fetch("/api/comments", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -97,7 +96,7 @@ export function CommentsSidebar({
 
   const handleDeleteComment = async (commentId: string) => {
     try {
-      const response = await fetch(apiUrl("/api/comments"), {
+      const response = await fetch("/api/comments", {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",

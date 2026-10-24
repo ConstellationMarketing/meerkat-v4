@@ -1,4 +1,3 @@
-import { apiUrl } from "@/lib/base";
 import { supabase } from "@/lib/supabase";
 
 export interface TeamMember {
@@ -15,7 +14,7 @@ export async function getTeamMembers(): Promise<TeamMember[]> {
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
     console.log("🔄 Fetching team members from /api/team-members...");
-    const response = await fetch(apiUrl("/api/team-members"), {
+    const response = await fetch("/api/team-members", {
       signal: controller.signal,
     });
 
@@ -73,7 +72,7 @@ export async function addTeamMember(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    const response = await fetch(apiUrl("/api/team-members"), {
+    const response = await fetch("/api/team-members", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -104,7 +103,7 @@ export async function updateTeamMemberRole(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    const response = await fetch(apiUrl("/api/team-members"), {
+    const response = await fetch("/api/team-members", {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -132,7 +131,7 @@ export async function removeTeamMember(memberId: string): Promise<void> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    const response = await fetch(apiUrl("/api/team-members"), {
+    const response = await fetch("/api/team-members", {
       method: "DELETE",
       headers: {
         "Content-Type": "application/json",

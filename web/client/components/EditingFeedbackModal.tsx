@@ -1,4 +1,3 @@
-import { appUrl } from "@/lib/base";
 import { useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -38,8 +37,9 @@ export function EditingFeedbackModal({
       const timeSpentString = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 
       // Construct article link if articleId is available
+      // Always use meerkatv3.netlify.app as the domain
       const articleLink = articleId
-        ? appUrl(`/editor/${articleId}`)
+        ? `https://meerkatv3.netlify.app/editor/${articleId}`
         : undefined;
 
       onSubmit({
