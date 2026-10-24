@@ -1,4 +1,3 @@
-import { apiUrl } from "@/lib/base";
 /**
  * Admin utilities for managing users and other administrative tasks
  */
@@ -28,7 +27,7 @@ export async function deleteUserFromAuth(
     throw new Error("Must provide either email or userId");
   }
 
-  const response = await fetch(apiUrl("/api/delete-user"), {
+  const response = await fetch("/api/delete-user", {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json",
@@ -56,7 +55,7 @@ export async function deleteUserAndDataFromAuth(
     throw new Error("Must provide either email or userId");
   }
 
-  const response = await fetch(apiUrl("/api/delete-user-cascade"), {
+  const response = await fetch("/api/delete-user-cascade", {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json",

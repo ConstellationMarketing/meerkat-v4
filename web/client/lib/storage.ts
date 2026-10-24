@@ -1,4 +1,3 @@
-import { apiUrl } from "@/lib/base";
 import { ArticleOutline } from "@/types/article";
 import { OutlineTemplate } from "@/lib/templates";
 import { supabase } from "@/lib/supabase";
@@ -275,7 +274,7 @@ export async function getArticleOutlines(options?: {
     // Try to fetch from the articles API endpoint first (uses service role, bypasses RLS)
     try {
       console.log("📡 Fetching articles from /api/articles (service role)...");
-      const response = await fetch(apiUrl("/api/articles"));
+      const response = await fetch("/api/articles");
       if (response.ok) {
         data = await response.json();
         console.log("✅ Successfully fetched articles from /api/articles");
@@ -1426,7 +1425,7 @@ export async function getArticleBySlug(
 
     // Fallback to API if not in localStorage
     console.log("getArticleBySlug - Not in localStorage, trying API");
-    const url = apiUrl(`/.netlify/functions/get-article?clientName=${encodeURIComponent(clientName)}&keyword=${encodeURIComponent(keyword)}`);
+    const url = `/.netlify/functions/get-article?clientName=${encodeURIComponent(clientName)}&keyword=${encodeURIComponent(keyword)}`;
 
     const response = await fetch(url);
     console.log("getArticleBySlug - API response status:", response.status);
@@ -1465,7 +1464,7 @@ export async function getArticleRevisions(
 ): Promise<ArticleRevision[]> {
   try {
     const response = await fetch(
-      apiUrl(`/.netlify/functions/get-article-revisions?article_id=${encodeURIComponent(articleId)}`),
+      `/.netlify/functions/get-article-revisions?article_id=${encodeURIComponent(articleId)}`,
     );
 
     if (!response.ok) {

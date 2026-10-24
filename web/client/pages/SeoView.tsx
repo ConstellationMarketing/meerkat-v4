@@ -1,4 +1,3 @@
-import { apiUrl } from "@/lib/base";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Copy, Check, Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -153,7 +152,7 @@ export default function SeoView() {
 
       // Persist the user-editable slug. The server normalizes + validates it
       // and recomputes the Page URL so publishing uses the user-set slug.
-      const slugRes = await fetch(apiUrl("/.netlify/functions/update-article"), {
+      const slugRes = await fetch("/.netlify/functions/update-article", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
